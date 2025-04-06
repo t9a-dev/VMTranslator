@@ -1,0 +1,34 @@
+[package]
+name = "vmtranslator"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "VMTranslator"
+path = "src/main.rs"
+
+[workspace]
+members = ["parser","code_writer"]
+
+[workspace.package]
+edition = "2021"
+publish = false
+license = "MIT"
+
+[workspace.dependencies]
+parser = {path = "./parser"}
+code_writer = {path = "./code_writer"}
+anyhow = "1.0.97"
+rand = "0.9.0"
+clap = {version = "4.5.34", features = ["derive"]}
+
+[dependencies]
+anyhow.workspace = true
+parser.workspace = true
+code_writer.workspace = true
+clap.workspace = true
+
+[dev-dependencies]
+rand.workspace = true
