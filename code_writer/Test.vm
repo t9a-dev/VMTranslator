@@ -1,0 +1,10 @@
+// that 5
+@THAT
+A=M+5
+D=M
+// push
+@SP
+A=M
+M=D
+@SP
+M=M+1

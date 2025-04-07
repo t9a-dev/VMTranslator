@@ -41,7 +41,7 @@ impl Parser {
         while self.has_more_lines()? {
             self.current_command = match self.vm_code.as_mut().lines().next().unwrap() {
                 Ok(line) if line.chars().all(char::is_whitespace) => None, //空白の場合は無視
-                Ok(line) if line.trim().starts_with(COMMENT_OUT_TOKEN) => None,   //コメント行の場合は無視
+                Ok(line) if line.trim().starts_with(COMMENT_OUT_TOKEN) => None, //コメント行の場合は無視
                 Ok(line) => Some(line.trim().to_string()),
                 Err(_) => None,
             };
@@ -56,14 +56,13 @@ impl Parser {
         todo!()
     }
 
-    pub fn arg1() -> Result<String>{
+    pub fn arg1() -> Result<String> {
         todo!()
     }
 
-    pub fn arg2() -> Result<String>{
+    pub fn arg2() -> Result<String> {
         todo!()
     }
-
 }
 
 #[cfg(test)]
@@ -119,5 +118,4 @@ mod tests {
 
         Ok(())
     }
-
 }
