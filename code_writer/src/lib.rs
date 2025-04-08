@@ -1,6 +1,8 @@
 use std::{fs::File, io::Write, path::Path};
 
 use anyhow::Result;
+use std::convert::AsRef;
+use strum_macros::AsRefStr;
 use unindent::unindent;
 
 use parser::CommandType;
@@ -8,6 +10,13 @@ use parser::CommandType;
 pub struct CodeWriter {
     assembly_file: Box<dyn Write>,
     filename: String,
+}
+
+#[derive(AsRefStr, Clone, Copy)]
+enum VariableRegister {
+    R13,
+    R14,
+    R15,
 }
 
 impl CodeWriter {
@@ -18,8 +27,37 @@ impl CodeWriter {
         }
     }
 
-    pub fn write_arithmetic(command: &str) -> Result<()> {
-        todo!()
+    pub fn write_arithmetic(&mut self, command: &str) -> Result<()> {
+        let variable_register = VariableRegister::R13;
+        self.write_pop()?;
+        self.write_load_register(variable_register)?;
+        self.write_pop()?;
+
+        // Arithmetic
+        let operator: String = unindent(
+            format!(
+                r#"{}
+        D=D{}M
+        @TRUE
+        {}
+        D=0
+        @PUSH
+        0;JMP
+        (TRUE)
+        D=-1
+        (PUSH)
+        "#,
+                variable_register.as_ref(),
+                "", //TODO
+                "", //TODO
+            )
+            .as_str(),
+        );
+        self.assembly_file.write(operator.as_bytes())?;
+
+        self.write_push()?;
+
+        Ok(())
     }
 
     pub fn write_push_pop(
@@ -105,6 +143,13 @@ impl CodeWriter {
         self.assembly_file.write(unindent(&pop_asm).as_bytes())?;
         Ok(())
     }
+
+    fn write_load_register(&mut self, register: VariableRegister) -> Result<()> {
+        self.assembly_file
+            .write(format!("{}\nM=D", register.as_ref()).as_bytes())?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -115,15 +160,16 @@ mod tests {
 
     #[test]
     fn playground() -> Result<()> {
+        assert_eq!("R13", VariableRegister::R13.as_ref());
         Ok(())
     }
 
     #[test]
-    fn test_push_command() -> Result<()>{
+    fn test_push_command() -> Result<()> {
         let test_file_name = "Test.vm";
         {
             let mut code_writer = CodeWriter::new(&Path::new(test_file_name));
-            code_writer.write_push_pop(CommandType::Push,"that",5)?;
+            code_writer.write_push_pop(CommandType::Push, "that", 5)?;
         }
 
         let mut asm_file_content = String::new();
@@ -140,8 +186,8 @@ mod tests {
         @SP
         M=M+1
         "#;
-        assert_eq!(unindent(expect_asm),unindent(&asm_file_content));
+        assert_eq!(unindent(expect_asm), unindent(&asm_file_content));
 
         Ok(())
-    } 
+    }
 }

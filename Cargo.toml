@@ -23,12 +23,16 @@ code_writer = {path = "./code_writer"}
 anyhow = "1.0.97"
 rand = "0.9.0"
 clap = {version = "4.5.34", features = ["derive"]}
+strum = "0.27.1"
+strum_macros = "0.27.1"
 
 [dependencies]
 anyhow.workspace = true
 parser.workspace = true
 code_writer.workspace = true
 clap.workspace = true
+strum.workspace = true
+strum_macros.workspace = true
 
 [dev-dependencies]
 rand.workspace = true
