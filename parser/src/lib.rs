@@ -1,10 +1,14 @@
 use anyhow::Result;
+use std::result::Result::Ok;
 use std::{
     fs::File,
     io::{BufRead, BufReader},
 };
 
 const COMMENT_OUT_TOKEN: &str = "//";
+const ARITHMETIC_COMMANDS: [&str; 9] = ["add", "sub", "neg", "eq", "gt", "lt", "and", "or", "not"];
+const PUSH_COMMAND: &str = "push";
+const POP_COMMAND: &str = "pop";
 
 #[derive(Debug, PartialEq)]
 pub enum CommandType {
@@ -53,15 +57,52 @@ impl Parser {
     }
 
     pub fn command_type(&self) -> Result<Option<CommandType>> {
-        todo!()
+        let command = self.current_command.clone().expect("current command empty");
+
+        if ARITHMETIC_COMMANDS
+            .iter()
+            .any(|arithmetic_command| command.starts_with(*arithmetic_command))
+        {
+            return Ok(Some(CommandType::Arithmetic));
+        }
+
+        if command.starts_with(PUSH_COMMAND) {
+            return Ok(Some(CommandType::Push));
+        };
+        if command.starts_with(POP_COMMAND) {
+            return Ok(Some(CommandType::Pop));
+        };
+
+        Ok(None)
     }
 
-    pub fn arg1() -> Result<String> {
-        todo!()
+    pub fn arg1(&self) -> Result<String> {
+        let current_command = self
+            .current_command
+            .clone()
+            .expect("current command is empty");
+        let commands = current_command.split_whitespace();
+        match self.command_type()?.unwrap() {
+            CommandType::Arithmetic => Ok(commands.into_iter().nth(0).unwrap().to_string()),
+            CommandType::Push | CommandType::Pop => {
+                Ok(commands.into_iter().nth(1).unwrap().to_string())
+            }
+            _ => todo!(),
+        }
     }
 
-    pub fn arg2() -> Result<String> {
-        todo!()
+    pub fn arg2(&self) -> Result<Option<String>> {
+        let current_command = self
+            .current_command
+            .clone()
+            .expect("current command is empty");
+        let commands = current_command.split_whitespace();
+        match self.command_type()?.unwrap() {
+            CommandType::Push | CommandType::Pop => {
+                Ok(Some(commands.into_iter().nth(2).unwrap().to_string()))
+            }
+            _ => Ok(None),
+        }
     }
 }
 
@@ -98,23 +139,116 @@ mod tests {
 
     #[test]
     fn test_has_more_lines() -> Result<()> {
-        let file_content = "@123\n//this comment\n \n(START)\nD;JGT";
+        let file_content = r#"
+        // push
+        push constant 7
+        push constant 8
+        add
+       "#;
         let test_file = create_test_file(&file_content);
 
         let mut parser = Parser::new(&test_file);
         let _ = fs::remove_file(test_file);
 
-        //@123
         parser.advance()?;
         assert_eq!(parser.has_more_lines()?, true);
 
-        //(START)
         parser.advance()?;
         assert_eq!(parser.has_more_lines()?, true);
 
-        //D;JGT
+        parser.advance()?;
+        assert_eq!(parser.has_more_lines()?, true);
+
         parser.advance()?;
         assert_eq!(parser.has_more_lines()?, false);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_command_type() -> Result<()> {
+        let file_content = r#"
+        // push
+        push constant 7
+        push constant 8
+        add
+        push constant 7
+        push constant 8
+        pop this 0
+        pop this 5
+       "#;
+        let test_file = create_test_file(&file_content);
+
+        let mut parser = Parser::new(&test_file);
+        let _ = fs::remove_file(test_file);
+
+        parser.advance()?;
+        assert_eq!(parser.command_type()?.unwrap(), CommandType::Push);
+        parser.advance()?;
+        assert_eq!(parser.command_type()?.unwrap(), CommandType::Push);
+
+        parser.advance()?;
+        assert_eq!(parser.command_type()?.unwrap(), CommandType::Arithmetic);
+
+        parser.advance()?;
+        assert_eq!(parser.command_type()?.unwrap(), CommandType::Push);
+
+        parser.advance()?;
+        assert_eq!(parser.command_type()?.unwrap(), CommandType::Push);
+
+        parser.advance()?;
+        assert_eq!(parser.command_type()?.unwrap(), CommandType::Pop);
+
+        parser.advance()?;
+        assert_eq!(parser.command_type()?.unwrap(), CommandType::Pop);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_arg1() -> Result<()> {
+        let file_content = r#"
+        // push
+        push constant 7
+        push constant 8
+        add
+        push constant 7
+        push constant 8
+        pop this 0
+        pop this 5
+       "#;
+        let test_file = create_test_file(&file_content);
+
+        let mut parser = Parser::new(&test_file);
+        let _ = fs::remove_file(test_file);
+
+        parser.advance()?;
+        assert_eq!(parser.arg1()?, "constant".to_string());
+        assert_eq!(parser.arg2()?.unwrap(), "7".to_string());
+
+        parser.advance()?;
+        assert_eq!(parser.arg1()?, "constant".to_string());
+        assert_eq!(parser.arg2()?.unwrap(), "8".to_string());
+
+        parser.advance()?;
+        assert_eq!(parser.arg1()?, "add".to_string());
+        assert_eq!(parser.arg2()?, None);
+
+        parser.advance()?;
+        assert_eq!(parser.arg1()?, "constant".to_string());
+        assert_eq!(parser.arg2()?.unwrap(), "7".to_string());
+
+        parser.advance()?;
+        assert_eq!(parser.arg1()?, "constant".to_string());
+        assert_eq!(parser.arg2()?.unwrap(), "8".to_string());
+
+        parser.advance()?;
+        assert_eq!(parser.arg1()?, "this".to_string());
+        assert_eq!(parser.arg2()?.unwrap(), "0".to_string());
+
+        parser.advance()?;
+        assert_eq!(parser.arg1()?, "this".to_string());
+        assert_eq!(parser.arg2()?.unwrap(), "5".to_string());
 
         Ok(())
     }

@@ -7,16 +7,16 @@ use unindent::unindent;
 
 use parser::CommandType;
 
-pub struct CodeWriter {
-    assembly_file: Box<dyn Write>,
-    filename: String,
-}
-
 #[derive(AsRefStr, Clone, Copy)]
 enum VariableRegister {
     R13,
     R14,
     R15,
+}
+
+pub struct CodeWriter {
+    assembly_file: Box<dyn Write>,
+    filename: String,
 }
 
 impl CodeWriter {
@@ -73,8 +73,10 @@ impl CodeWriter {
         Ok(())
     }
 
-    pub fn close(self) {
-        drop(self.assembly_file)
+    pub fn close(mut self) -> Result<()> {
+        self.write_infinity_loop()?;
+        drop(self.assembly_file);
+        Ok(())
     }
 
     fn get_arithmetic_command(
@@ -94,12 +96,7 @@ impl CodeWriter {
         }
 
         Ok(Some(unindent(
-            format!(
-                "@{}\n{}",
-                variable_register.as_ref(),
-                operator.unwrap(),
-            )
-            .as_str(),
+            format!("@{}\n{}", variable_register.as_ref(), operator.unwrap(),).as_str(),
         )))
     }
 
@@ -239,6 +236,21 @@ impl CodeWriter {
 
         Ok(())
     }
+
+    fn write_infinity_loop(&mut self) -> Result<()> {
+        self.assembly_file.write(
+            unindent(
+                r#"
+        (END)
+        @END
+        0;JMP
+        "#,
+            )
+            .as_bytes(),
+        )?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -368,6 +380,25 @@ mod tests {
         M=D
         @SP
         M=M+1
+        "#;
+        assert_eq!(unindent(expect_asm), unindent(&asm_file_content));
+
+        fs::remove_file(test_file_name)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_write_infinity_loop() -> Result<()> {
+        let (mut code_writer, test_file_name) = get_code_writer()?;
+        code_writer.write_infinity_loop()?;
+
+        let mut asm_file_content = String::new();
+        File::open(&test_file_name)?.read_to_string(&mut asm_file_content)?;
+
+        let expect_asm = r#"
+        (END)
+        @END
+        0;JMP
         "#;
         assert_eq!(unindent(expect_asm), unindent(&asm_file_content));
 
