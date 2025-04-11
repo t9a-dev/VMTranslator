@@ -1,7 +1,5 @@
 use anyhow::Result;
 use clap::Parser;
-use std::fs::File;
-use std::io::Write;
 use std::path::Path;
 
 const ASSEMBLY_FILE_EXTENSION: &str = "asm";
@@ -30,15 +28,22 @@ fn vm_translator(config: &Arg) -> Result<String> {
         vm_file_path.file_stem().unwrap().to_string_lossy(),
         ASSEMBLY_FILE_EXTENSION
     ));
-    let code_writer = code_writer::CodeWriter::new(&asm_file_path);
+    let mut code_writer = code_writer::CodeWriter::new(&asm_file_path);
 
     while parser.has_more_lines()? {
         parser.advance()?;
 
-        match parser.command_type()?.unwrap(){
-            parser::CommandType::Arithmetic => todo!(),
-            parser::CommandType::Push => todo!(),
-            parser::CommandType::Pop => todo!(),
+        match parser.command_type()?.unwrap() {
+            parser::CommandType::Arithmetic => {
+                code_writer.write_arithmetic(parser.arg1().unwrap().as_str())?;
+            }
+            parser::CommandType::Push | parser::CommandType::Pop => {
+                code_writer.write_push_pop(
+                    parser.command_type()?.unwrap(),
+                    parser.arg1().unwrap().as_str(),
+                    parser.arg2()?.unwrap(),
+                )?;
+            }
             parser::CommandType::Label => todo!(),
             parser::CommandType::Goto => todo!(),
             parser::CommandType::If => todo!(),
@@ -47,7 +52,7 @@ fn vm_translator(config: &Arg) -> Result<String> {
             parser::CommandType::Call => todo!(),
         }
 
-        if !parser.has_more_lines()?{
+        if !parser.has_more_lines()? {
             break;
         }
     }
@@ -60,29 +65,31 @@ fn vm_translator(config: &Arg) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        fs,
-        io::{Read, Write},
-        path::Path,
-    };
+    use std::{fs, io::Write, path::Path, process::Command};
 
-    use super::*;
+    use anyhow::Result;
     use rand::distr::{Alphanumeric, SampleString};
+
+    use crate::vm_translator;
 
     fn create_test_file(file_content: &str) -> String {
         let filename = Alphanumeric.sample_string(&mut rand::rng(), 5);
         //bacon testでファイル変更検知が発生しないようにtargetディレクトリにテストファイルを作成する。
         let _ = fs::create_dir_all("../target/test/data");
         let file_path = Path::new("../target/test/data").join(&filename);
-        let mut file = File::create(&file_path).unwrap();
+        let mut file = fs::File::create(&file_path).unwrap();
         file.write(file_content.as_bytes()).unwrap();
 
         file_path.to_string_lossy().to_string()
     }
 
     #[test]
-    fn playground() {
-        let path = Path::new("/a/b/c.txt");
-        assert_eq!(path.parent(), Some(Path::new("/a/b/")));
+    fn run_translator() -> Result<()> {
+        let config = super::Arg {
+            file: "test_vm_files/StackTest.vm".to_string(),
+        };
+        vm_translator(&config)?;
+
+        Ok(())
     }
 }

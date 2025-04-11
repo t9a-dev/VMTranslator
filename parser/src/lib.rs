@@ -91,7 +91,7 @@ impl Parser {
         }
     }
 
-    pub fn arg2(&self) -> Result<Option<String>> {
+    pub fn arg2(&self) -> Result<Option<u16>> {
         let current_command = self
             .current_command
             .clone()
@@ -99,7 +99,7 @@ impl Parser {
         let commands = current_command.split_whitespace();
         match self.command_type()?.unwrap() {
             CommandType::Push | CommandType::Pop => {
-                Ok(Some(commands.into_iter().nth(2).unwrap().to_string()))
+                Ok(Some(commands.into_iter().nth(2).unwrap().parse()?))
             }
             _ => Ok(None),
         }

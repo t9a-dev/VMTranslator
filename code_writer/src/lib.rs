@@ -1,6 +1,9 @@
+pub mod helper;
+
 use std::{fs::File, io::Write, path::Path};
 
 use anyhow::Result;
+use helper::arithmetic::ArithmeticCommandHelper;
 use std::convert::AsRef;
 use strum_macros::AsRefStr;
 use unindent::unindent;
@@ -8,7 +11,7 @@ use unindent::unindent;
 use parser::CommandType;
 
 #[derive(AsRefStr, Clone, Copy)]
-enum VariableRegister {
+pub enum VariableRegister {
     R13,
     R14,
     R15,
@@ -38,14 +41,10 @@ impl CodeWriter {
         }
 
         // Arithmetic
-        let arithmetic_command = self
-            .get_arithmetic_command(command, &variable_register)
-            .or_else(|_| {
-                self.get_comparison_command(command, &variable_register)
-                    .or_else(|_| self.get_logical_command(command, &variable_register))
-            })
-            .expect(format!("no support command. command: {}", command).as_str())
-            .unwrap();
+        let arithmetic_command = ArithmeticCommandHelper::get_command(
+            command,
+            &variable_register,
+        )?;
         self.assembly_file.write(arithmetic_command.as_bytes())?;
 
         self.write_push()?;
@@ -79,93 +78,6 @@ impl CodeWriter {
         Ok(())
     }
 
-    fn get_arithmetic_command(
-        &self,
-        command: &str,
-        variable_register: &VariableRegister,
-    ) -> Result<Option<String>> {
-        let operator: Option<&str> = match command {
-            "add" => Some("\n// add\nD=D+M\n"),
-            "sub" => Some("\n// sub\nD=D-M\n"),
-            "neg" => Some("\n// neg\nD=-M\n"),
-            &_ => None,
-        };
-
-        if operator.is_none() {
-            return Ok(None);
-        }
-
-        Ok(Some(unindent(
-            format!("@{}\n{}", variable_register.as_ref(), operator.unwrap(),).as_str(),
-        )))
-    }
-
-    fn get_comparison_command(
-        &self,
-        command: &str,
-        variable_register: &VariableRegister,
-    ) -> Result<Option<String>> {
-        let comp_operator: Option<&str> = match command {
-            "eq" => Some("\n// eq\nD;JEQ\n"),
-            "gt" => Some("\n// gt\nD;JGT\n"),
-            "lt" => Some("\n// lt\nD;JLT\n"),
-            &_ => None,
-        };
-
-        if comp_operator.is_none() {
-            return Ok(None);
-        }
-
-        Ok(Some(unindent(
-            format!(
-                r#"
-        {}
-        D=D-M
-        @TRUE
-        {}
-        D=0
-        @PUSH
-        0;JMP
-        (TRUE)
-        D=-1
-        (PUSH)
-        "#,
-                variable_register.as_ref(),
-                comp_operator.unwrap(),
-            )
-            .as_str(),
-        )))
-    }
-
-    fn get_logical_command(
-        &self,
-        command: &str,
-        variable_register: &VariableRegister,
-    ) -> Result<Option<String>> {
-        let operator: Option<&str> = match command {
-            "and" => Some("\n// and\nD=D&M\n"),
-            "or" => Some("\n// or\nD=D|M\n"),
-            "not" => Some("\n// not\nD=!M\n"),
-            &_ => None,
-        };
-
-        if operator.is_none() {
-            return Ok(None);
-        }
-
-        Ok(Some(unindent(
-            format!(
-                r#"
-        {}
-        {}
-        "#,
-                variable_register.as_ref(),
-                operator.unwrap(),
-            )
-            .as_str(),
-        )))
-    }
-
     fn write_segment(&mut self, command: CommandType, segment: &str, index: u16) -> Result<()> {
         let segment_symbol_asm = match segment {
             "local" => Some(format!("// local {}\n@LCL\n", index)),
@@ -183,16 +95,31 @@ impl CodeWriter {
             _ => None,
         };
 
-        let segment_access_asm = format!(
-            "\n{}A=M+{}\n",
-            segment_symbol_asm.expect("not support segment"),
-            index
-        );
+        let segment_access_asm = match segment {
+            "constant" => {
+                format!(
+                    "\n{}D=A\n",
+                    segment_symbol_asm.expect("not support segment"),
+                )
+            }
+            _ => {
+                format!(
+                    "\n{}A=M+{}\n",
+                    segment_symbol_asm.expect("not support segment"),
+                    index
+                )
+            }
+        };
 
         match command {
             CommandType::Push => {
-                self.assembly_file
-                    .write(format!("{}D=M\n", segment_access_asm).as_bytes())?;
+                if segment == "constant" {
+                    self.assembly_file
+                        .write(format!("{}\n", segment_access_asm).as_bytes())?;
+                } else {
+                    self.assembly_file
+                        .write(format!("{}D=M\n", segment_access_asm).as_bytes())?;
+                }
             }
             CommandType::Pop => {
                 self.assembly_file
@@ -275,6 +202,25 @@ mod tests {
     #[test]
     fn playground() -> Result<()> {
         assert_eq!("R13", VariableRegister::R13.as_ref());
+        Ok(())
+    }
+
+    #[test]
+    fn test_write_segment_when_constant() -> Result<()> {
+        let (mut code_writer, test_file_name) = get_code_writer()?;
+        code_writer.write_segment(CommandType::Push, "constant", 10)?;
+
+        let mut asm_file_content = String::new();
+        File::open(&test_file_name)?.read_to_string(&mut asm_file_content)?;
+
+        let expect_asm = r#"// constant 10
+        @10
+        D=A
+
+        "#;
+        assert_eq!(unindent(expect_asm), unindent(&asm_file_content));
+
+        fs::remove_file(test_file_name)?;
         Ok(())
     }
 
