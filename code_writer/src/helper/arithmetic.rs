@@ -9,14 +9,19 @@ const LOGICAL_COMMANDS: [&str; 3] = ["and", "or", "not"];
 pub struct ArithmeticCommandHelper {}
 
 impl ArithmeticCommandHelper {
-    pub fn get_command(command: &str, variable_register: &VariableRegister,comparison_count: u16) -> Result<String> {
+    pub fn get_command(
+        command: &str,
+        variable_register: &VariableRegister,
+        comparison_count: u16,
+    ) -> Result<String> {
         match command {
             cmd if ARITHMETIC_COMMANDS.iter().any(|a_cmd| *a_cmd == cmd) => {
                 Ok(Self::get_arithmetic_command(command, variable_register)?.unwrap())
             }
-            cmd if COMPARISON_COMMANDS.iter().any(|c_cmd| *c_cmd == cmd) => {
-                Ok(Self::get_comparison_command(command, variable_register,comparison_count)?.unwrap())
-            }
+            cmd if COMPARISON_COMMANDS.iter().any(|c_cmd| *c_cmd == cmd) => Ok(
+                Self::get_comparison_command(command, variable_register, comparison_count)?
+                    .unwrap(),
+            ),
             cmd if LOGICAL_COMMANDS.iter().any(|l_cmd| *l_cmd == cmd) => {
                 Ok(Self::get_logical_command(command, variable_register)?.unwrap())
             }
@@ -29,9 +34,9 @@ impl ArithmeticCommandHelper {
         variable_register: &VariableRegister,
     ) -> Result<Option<String>> {
         let operator: Option<&str> = match command {
-            "add" => Some("\n// add\nD=D+M\n"),
-            "sub" => Some("\n// sub\nD=D-M\n"),
-            "neg" => Some("\n// neg\nD=-M\n"),
+            "add" => Some("// add\nD=D+M"),
+            "sub" => Some("// sub\nD=D-M"),
+            "neg" => Some("// neg\nD=-M"),
             &_ => None,
         };
 
@@ -50,9 +55,9 @@ impl ArithmeticCommandHelper {
         comparison_count: u16,
     ) -> Result<Option<String>> {
         let comp_operator: Option<&str> = match command {
-            "eq" => Some("\n// eq\nD;JEQ\n"),
-            "gt" => Some("\n// gt\nD;JGT\n"),
-            "lt" => Some("\n// lt\nD;JLT\n"),
+            "eq" => Some("// eq\nD;JEQ"),
+            "gt" => Some("// gt\nD;JGT"),
+            "lt" => Some("// lt\nD;JLT"),
             &_ => None,
         };
 
@@ -90,9 +95,9 @@ D=-1
         variable_register: &VariableRegister,
     ) -> Result<Option<String>> {
         let operator: Option<&str> = match command {
-            "and" => Some("\n// and\nD=D&M\n"),
-            "or" => Some("\n// or\nD=D|M\n"),
-            "not" => Some("\n// not\nD=!M\n"),
+            "and" => Some("// and\nD=D&M"),
+            "or" => Some("// or\nD=D|M"),
+            "not" => Some("// not\nD=!M"),
             &_ => None,
         };
 

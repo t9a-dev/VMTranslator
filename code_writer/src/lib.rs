@@ -6,7 +6,7 @@ use anyhow::Result;
 use helper::arithmetic::ArithmeticCommandHelper;
 use std::convert::AsRef;
 use strum_macros::AsRefStr;
-use unindent::unindent;
+use unindent::{unindent, unindent_bytes};
 
 use parser::CommandType;
 
@@ -30,21 +30,33 @@ impl CodeWriter {
         }
     }
 
-    pub fn write_arithmetic(&mut self, command: &str,comparison_count:u16) -> Result<()> {
+    pub fn write_arithmetic(&mut self, command: &str, comparison_count: u16) -> Result<()> {
         let is_single_operand = command == "neg" || command == "not";
         let variable_register = VariableRegister::R13;
-        self.write_pop()?;
-        self.write_load_register(variable_register)?;
-        // オペランドが1つの場合はyのみスタックからpopする
-        if !is_single_operand {
-            self.write_pop()?;
-        }
 
-        // Arithmetic
-        let arithmetic_command = ArithmeticCommandHelper::get_command(command, &variable_register,comparison_count)?;
-        self.assembly_file.write(arithmetic_command.as_bytes())?;
-
-        self.write_push()?;
+        self.write_code(unindent(
+            format!(
+                "{}
+{}
+{}
+{}
+{}",
+                    self.get_pop_code()?,
+                    self.get_load_register_code(variable_register)?,
+                    if !is_single_operand {
+                        self.get_pop_code()?
+                    } else {
+                        "".to_string()
+                    },
+                    ArithmeticCommandHelper::get_command(
+                        command,
+                        &variable_register,
+                        comparison_count
+                    )?,
+                    self.get_push_code()?,
+            )
+            .as_str(),
+        ))?;
 
         Ok(())
     }
@@ -55,36 +67,32 @@ impl CodeWriter {
         segment: &str,
         index: u16,
     ) -> Result<()> {
-        match command {
-            CommandType::Push => {
-                self.write_segment(command, segment, index)?;
-                self.write_push()?;
-            }
-            CommandType::Pop => {
-                self.write_pop()?;
-                self.write_segment(command, segment, index)?;
-            }
-            _ => (),
-        }
+        self.write_code(self.get_segment_code(command, segment, index)?)?;
         Ok(())
     }
 
     pub fn close(mut self) -> Result<()> {
-        self.write_infinity_loop()?;
+        self.write_code(self.get_infinity_loop_code()?)?;
         drop(self.assembly_file);
         Ok(())
     }
 
-    fn write_segment(&mut self, command: CommandType, segment: &str, index: u16) -> Result<()> {
+    fn write_code(&mut self, code: String) -> Result<()> {
+        self.assembly_file.write(&unindent_bytes(code.as_bytes()))?;
+        Ok(())
+    }
+
+    fn get_segment_code(&self, command: CommandType, segment: &str, index: u16) -> Result<String> {
+        let variable_register = VariableRegister::R13;
         let segment_symbol_asm = match segment {
-            "local" => Some(format!("// local {}\n@LCL\n", index)),
-            "argument" => Some(format!("// argument {}\n@ARG\n", index)),
-            "this" => Some(format!("// this {}\n@THIS\n", index)),
-            "that" => Some(format!("// that {}\n@THAT\n", index)),
-            "temp" => Some(format!("// temp {}\n@TEMP\n", index)),
+            "local" => Some(format!("// local {}\n@LCL", index)),
+            "argument" => Some(format!("// argument {}\n@ARG", index)),
+            "this" => Some(format!("// this {}\n@THIS", index)),
+            "that" => Some(format!("// that {}\n@THAT", index)),
+            "temp" => Some(format!("// temp {}\n@TEMP", index)),
             "constant" => Some(format!("// constant {}\n@{}\n", index, index)),
-            "pointer" if index == 0 => Some(format!("// this {}\n@THIS\n", index)),
-            "pointer" if index == 1 => Some(format!("// that {}\n@THAT\n", index)),
+            "pointer" if index == 0 => Some(format!("// this {}\n@THIS", index)),
+            "pointer" if index == 1 => Some(format!("// that {}\n@THAT", index)),
             "static" => Some(format!(
                 "// static {}\n@{}.{}\n",
                 index, self.filename, index
@@ -92,94 +100,105 @@ impl CodeWriter {
             _ => None,
         };
 
-        let segment_access_asm = match segment {
-            "constant" => {
-                format!(
-                    "\n{}D=A\n",
-                    segment_symbol_asm.expect("not support segment"),
-                )
-            },
-            "static" => {
-                format!(
-                    "\n{}",
-                    segment_symbol_asm.expect("not support segment"),
-                )
-            },
-            _ => {
-                format!(
-                    "\n{}A=M+{}\n",
-                    segment_symbol_asm.expect("not support segment"),
-                    index
-                )
-            }
-        };
-
-        match command {
+        let segment_code = match command {
             CommandType::Push => {
                 if segment == "constant" {
-                    self.assembly_file
-                        .write(format!("{}\n", segment_access_asm).as_bytes())?;
+                    format!(
+                        "{}D=A\n{}",
+                        segment_symbol_asm.unwrap(),
+                        self.get_push_code()?
+                    )
                 } else {
-                    self.assembly_file
-                        .write(format!("{}D=M\n", segment_access_asm).as_bytes())?;
+                    format!(
+                        "
+@{}
+D=A
+{}
+A=D+M
+D=M
+{}
+",
+                        index,
+                        segment_symbol_asm.unwrap(),
+                        self.get_push_code()?,
+                    )
                 }
             }
             CommandType::Pop => {
-                self.assembly_file
-                    .write(format!("{}M=D\n", segment_access_asm).as_bytes())?;
+                if segment == "static" {
+                    format!(
+                        "
+{}
+{}
+M=D
+",
+                        self.get_pop_code()?, segment_symbol_asm.unwrap()
+                    )
+                } else {
+                    format!(
+                        "
+@{}
+D=A
+{}
+D=D+M
+@{}
+M=D
+{}
+@{}
+A=M
+M=D
+",
+                        index,
+                        segment_symbol_asm.unwrap(),
+                        &variable_register.as_ref(),
+                        self.get_pop_code()?,
+                        &variable_register.as_ref(),
+                    )
+                }
             }
-            _ => (),
+            _ => panic!("get segment code failed"),
         };
-        Ok(())
+
+        Ok(segment_code.to_string())
     }
 
-    fn write_push(&mut self) -> Result<()> {
-        let push_asm = r#"
-
-       // push
-       @SP
-       A=M
-       M=D
-       @SP
-       M=M+1
-       "#;
-        self.assembly_file.write(unindent(&push_asm).as_bytes())?;
-        Ok(())
+    fn get_push_code(&self) -> Result<String> {
+        Ok("
+// push
+@SP
+A=M
+M=D
+@SP
+M=M+1
+"
+            .to_string())
     }
 
-    fn write_pop(&mut self) -> Result<()> {
-        let pop_asm = r#"
-
-        // pop
-        @SP
-        M=M-1
-        A=M
-        D=M
-       "#;
-        self.assembly_file.write(unindent(&pop_asm).as_bytes())?;
-        Ok(())
+    fn get_pop_code(&self) -> Result<String> {
+        Ok("
+// pop
+@SP
+M=M-1
+A=M
+D=M
+"
+        .to_string())
     }
 
-    fn write_load_register(&mut self, register: VariableRegister) -> Result<()> {
-        self.assembly_file
-            .write(format!("@{}\nM=D\n", register.as_ref()).as_bytes())?;
-
-        Ok(())
+    fn get_load_register_code(&self, register: VariableRegister) -> Result<String> {
+        Ok(format!(
+            "@{}
+M=D",
+            register.as_ref()
+        ))
     }
 
-    fn write_infinity_loop(&mut self) -> Result<()> {
-        self.assembly_file.write(
-            unindent(
-                r#"
-        (END)
+    fn get_infinity_loop_code(&self) -> Result<String> {
+        Ok("(END)
         @END
         0;JMP
-        "#,
-            )
-            .as_bytes(),
-        )?;
-
-        Ok(())
+        "
+        .to_string())
     }
 }
 
@@ -202,6 +221,13 @@ mod tests {
         ))
     }
 
+    fn normalize(s: &str) -> String{
+        s.lines()
+        .map(str::trim)
+        .collect::<Vec<_>>()
+        .join("")
+    }
+
     #[test]
     fn playground() -> Result<()> {
         assert_eq!("R13", VariableRegister::R13.as_ref());
@@ -210,37 +236,47 @@ mod tests {
 
     #[test]
     fn test_write_segment_when_constant() -> Result<()> {
-        let (mut code_writer, test_file_name) = get_code_writer()?;
-        code_writer.write_segment(CommandType::Push, "constant", 10)?;
+        let (code_writer, test_file_name) = get_code_writer()?;
+        let (segment, index) = ("constant", 10);
+        let asm_file_content = code_writer.get_segment_code(CommandType::Push, &segment, index)?;
 
-        let mut asm_file_content = String::new();
-        File::open(&test_file_name)?.read_to_string(&mut asm_file_content)?;
-
-        let expect_asm = r#"// constant 10
+        let expect_asm = "// constant 10
         @10
         D=A
-
-        "#;
-        assert_eq!(unindent(expect_asm), unindent(&asm_file_content));
+        // push
+        @SP
+        A=M
+        M=D
+        @SP
+        M=M+1";
+        assert_eq!(normalize(expect_asm), normalize(&asm_file_content));
 
         fs::remove_file(test_file_name)?;
         Ok(())
     }
 
     #[test]
-    fn test_write_segment() -> Result<()> {
-        let (mut code_writer, test_file_name) = get_code_writer()?;
-        code_writer.write_segment(CommandType::Push, "that", 5)?;
+    fn test_write_segment_when_push() -> Result<()> {
+        let (code_writer, test_file_name) = get_code_writer()?;
+        let (segment, index) = ("that", 5);
+        let asm_file_content = code_writer.get_segment_code(CommandType::Push, &segment, index)?;
 
-        let mut asm_file_content = String::new();
-        File::open(&test_file_name)?.read_to_string(&mut asm_file_content)?;
-
-        let expect_asm = r#"// that 5
+        let expect_asm = format!(
+            "@{}
+        D=A
+        // that {}
         @THAT
-        A=M+5
+        A=D+M
         D=M
-        "#;
-        assert_eq!(unindent(expect_asm), unindent(&asm_file_content));
+        // push
+        @SP
+        A=M
+        M=D
+        @SP
+        M=M+1",
+            index, index,
+        );
+        assert_eq!(normalize(&expect_asm), normalize(&asm_file_content));
 
         fs::remove_file(test_file_name)?;
         Ok(())
@@ -249,24 +285,28 @@ mod tests {
     #[test]
     fn test_push_command() -> Result<()> {
         let (mut code_writer, test_file_name) = get_code_writer()?;
-        code_writer.write_push_pop(CommandType::Push, "that", 5)?;
+        let (segment, index) = ("that", 5);
+        code_writer.write_push_pop(CommandType::Push, &segment, index)?;
 
         let mut asm_file_content = String::new();
         File::open(&test_file_name)?.read_to_string(&mut asm_file_content)?;
 
-        let expect_asm = r#"// that 5
+        let expect_asm = format!(
+            "@{}
+        D=A
+        // that {}
         @THAT
-        A=M+5
+        A=D+M
         D=M
-
         // push
         @SP
         A=M
         M=D
         @SP
-        M=M+1
-        "#;
-        assert_eq!(unindent(expect_asm), unindent(&asm_file_content));
+        M=M+1",
+            index, index,
+        );
+        assert_eq!(normalize(&expect_asm), normalize(&asm_file_content));
 
         fs::remove_file(test_file_name)?;
         Ok(())
@@ -275,28 +315,29 @@ mod tests {
     #[test]
     fn test_pop_command_when_static() -> Result<()> {
         let (mut code_writer, test_file_name) = get_code_writer()?;
-        let segment = "static";
-        let index = 10;
+        let (segment, index) = ("static", 10);
         code_writer.write_push_pop(CommandType::Pop, &segment, index)?;
 
         let mut asm_file_content = String::new();
         File::open(&test_file_name)?.read_to_string(&mut asm_file_content)?;
 
-        let expect_asm = format!(r#"// pop
+        let expect_asm = format!(
+            "// pop
         @SP
         M=M-1
         A=M
         D=M
-
         // static {}
         @{}.{}
-        M=D
-        "#,
-        index,
-        Path::new(&test_file_name).file_stem().unwrap().to_string_lossy(),
-        index,
+        M=D",
+            index,
+            Path::new(&test_file_name)
+                .file_stem()
+                .unwrap()
+                .to_string_lossy(),
+            index,
         );
-        assert_eq!(unindent(&expect_asm), unindent(&asm_file_content));
+        assert_eq!(normalize(&expect_asm), normalize(&asm_file_content));
 
         fs::remove_file(test_file_name)?;
         Ok(())
@@ -305,23 +346,32 @@ mod tests {
     #[test]
     fn test_pop_command() -> Result<()> {
         let (mut code_writer, test_file_name) = get_code_writer()?;
-        code_writer.write_push_pop(CommandType::Pop, "local", 0)?;
+        let (segment, index) = ("local", 6);
+        code_writer.write_push_pop(CommandType::Pop, &segment, index)?;
 
         let mut asm_file_content = String::new();
         File::open(&test_file_name)?.read_to_string(&mut asm_file_content)?;
 
-        let expect_asm = r#"// pop
+        let expect_asm = format!(
+            "@{}
+        D=A
+        // local {}
+        @LCL
+        D=D+M
+        @R13
+        M=D
+        // pop
         @SP
         M=M-1
         A=M
         D=M
-
-        // local 0
-        @LCL
-        A=M+0
+        @R13
+        A=M
         M=D
-        "#;
-        assert_eq!(unindent(expect_asm), unindent(&asm_file_content));
+        ",
+            index, index,
+        );
+        assert_eq!(normalize(&expect_asm), normalize(&asm_file_content));
 
         fs::remove_file(test_file_name)?;
         Ok(())
@@ -330,37 +380,33 @@ mod tests {
     #[test]
     fn test_write_arithmetic() -> Result<()> {
         let (mut code_writer, test_file_name) = get_code_writer()?;
-        code_writer.write_arithmetic("add",0)?;
+        code_writer.write_arithmetic("add", 0)?;
 
         let mut asm_file_content = String::new();
         File::open(&test_file_name)?.read_to_string(&mut asm_file_content)?;
 
-        let expect_asm = r#"// pop
+        let expect_asm = "// pop
         @SP
         M=M-1
         A=M
         D=M
         @R13
         M=D
-
         // pop
         @SP
         M=M-1
         A=M
         D=M
         @R13
-
         // add
         D=D+M
-
         // push
         @SP
         A=M
         M=D
         @SP
-        M=M+1
-        "#;
-        assert_eq!(unindent(expect_asm), unindent(&asm_file_content));
+        M=M+1";
+        assert_eq!(normalize(expect_asm), normalize(&asm_file_content));
 
         fs::remove_file(test_file_name)?;
         Ok(())
@@ -368,18 +414,15 @@ mod tests {
 
     #[test]
     fn test_write_infinity_loop() -> Result<()> {
-        let (mut code_writer, test_file_name) = get_code_writer()?;
-        code_writer.write_infinity_loop()?;
+        let (code_writer, test_file_name) = get_code_writer()?;
+        let asm_file_content = code_writer.get_infinity_loop_code()?;
 
-        let mut asm_file_content = String::new();
-        File::open(&test_file_name)?.read_to_string(&mut asm_file_content)?;
-
-        let expect_asm = r#"
+        let expect_asm = "
         (END)
         @END
         0;JMP
-        "#;
-        assert_eq!(unindent(expect_asm), unindent(&asm_file_content));
+        ";
+        assert_eq!(normalize(expect_asm), normalize(&asm_file_content));
 
         fs::remove_file(test_file_name)?;
         Ok(())

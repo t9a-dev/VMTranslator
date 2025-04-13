@@ -30,13 +30,13 @@ fn vm_translator(config: &Arg) -> Result<String> {
     ));
     let mut code_writer = code_writer::CodeWriter::new(&asm_file_path);
 
-    let mut comparison_count :u16= 0;
+    let mut comparison_count: u16 = 0;
     while parser.has_more_lines()? {
         parser.advance()?;
 
         match parser.command_type()?.unwrap() {
             parser::CommandType::Arithmetic => {
-                code_writer.write_arithmetic(parser.arg1().unwrap().as_str(),comparison_count)?;
+                code_writer.write_arithmetic(parser.arg1().unwrap().as_str(), comparison_count)?;
             }
             parser::CommandType::Push | parser::CommandType::Pop => {
                 code_writer.write_push_pop(
