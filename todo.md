@@ -1,3 +1,6 @@
 - [x] code_writerで出力ファイルに書き込む操作をメソッドに切り出してこれを利用するようにする
 - [x] code_writerの出力ファイルへの書き込みメソッド内でunindentするようにする
-- [ ] BasicTestを通す
+- [x] BasicTestを通す
+- [ ] PointerTestを通す
+- [ ] StaticTestを通す
+- [ ] 全てのテストが通るか再確認する

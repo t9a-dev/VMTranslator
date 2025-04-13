@@ -41,19 +41,19 @@ impl CodeWriter {
 {}
 {}
 {}",
-                    self.get_pop_code()?,
-                    self.get_load_register_code(variable_register)?,
-                    if !is_single_operand {
-                        self.get_pop_code()?
-                    } else {
-                        "".to_string()
-                    },
-                    ArithmeticCommandHelper::get_command(
-                        command,
-                        &variable_register,
-                        comparison_count
-                    )?,
-                    self.get_push_code()?,
+                self.get_pop_code()?,
+                self.get_load_register_code(variable_register)?,
+                if !is_single_operand {
+                    self.get_pop_code()?
+                } else {
+                    "".to_string()
+                },
+                ArithmeticCommandHelper::get_command(
+                    command,
+                    &variable_register,
+                    comparison_count
+                )?,
+                self.get_push_code()?,
             )
             .as_str(),
         ))?;
@@ -83,13 +83,14 @@ impl CodeWriter {
     }
 
     fn get_segment_code(&self, command: CommandType, segment: &str, index: u16) -> Result<String> {
+        let index_for_temp_segment = index + 5; //TEMPセグメントはRAM[5~12]固定
         let variable_register = VariableRegister::R13;
         let segment_symbol_asm = match segment {
             "local" => Some(format!("// local {}\n@LCL", index)),
             "argument" => Some(format!("// argument {}\n@ARG", index)),
             "this" => Some(format!("// this {}\n@THIS", index)),
             "that" => Some(format!("// that {}\n@THAT", index)),
-            "temp" => Some(format!("// temp {}\n@TEMP", index)),
+            "temp" => Some(format!("// temp {}", index_for_temp_segment)),
             "constant" => Some(format!("// constant {}\n@{}\n", index, index)),
             "pointer" if index == 0 => Some(format!("// this {}\n@THIS", index)),
             "pointer" if index == 1 => Some(format!("// that {}\n@THAT", index)),
@@ -101,14 +102,28 @@ impl CodeWriter {
         };
 
         let segment_code = match command {
-            CommandType::Push => {
-                if segment == "constant" {
+            CommandType::Push => match segment {
+                "constant" => {
                     format!(
                         "{}D=A\n{}",
                         segment_symbol_asm.unwrap(),
                         self.get_push_code()?
                     )
-                } else {
+                }
+                "temp" => {
+                    format!(
+                        "
+{}
+@{}
+D=M
+{}
+",
+                        segment_symbol_asm.unwrap(),
+                        index_for_temp_segment,
+                        self.get_push_code()?,
+                    )
+                }
+                _ => {
                     format!(
                         "
 @{}
@@ -123,18 +138,40 @@ D=M
                         self.get_push_code()?,
                     )
                 }
-            }
-            CommandType::Pop => {
-                if segment == "static" {
+            },
+            CommandType::Pop => match segment {
+                "static" => {
                     format!(
                         "
 {}
 {}
 M=D
 ",
-                        self.get_pop_code()?, segment_symbol_asm.unwrap()
+                        self.get_pop_code()?,
+                        segment_symbol_asm.unwrap()
                     )
-                } else {
+                }
+                "temp" => {
+                    format!(
+                        "
+{}
+@{}
+D=A
+@{}
+M=D
+{}
+@{}
+A=M
+M=D
+",
+                        segment_symbol_asm.unwrap(),
+                        index_for_temp_segment,
+                        &variable_register.as_ref(),
+                        self.get_pop_code()?,
+                        &variable_register.as_ref(),
+                    )
+                }
+                _ => {
                     format!(
                         "
 @{}
@@ -155,7 +192,7 @@ M=D
                         &variable_register.as_ref(),
                     )
                 }
-            }
+            },
             _ => panic!("get segment code failed"),
         };
 
@@ -171,7 +208,7 @@ M=D
 @SP
 M=M+1
 "
-            .to_string())
+        .to_string())
     }
 
     fn get_pop_code(&self) -> Result<String> {
@@ -221,11 +258,8 @@ mod tests {
         ))
     }
 
-    fn normalize(s: &str) -> String{
-        s.lines()
-        .map(str::trim)
-        .collect::<Vec<_>>()
-        .join("")
+    fn normalize(s: &str) -> String {
+        s.lines().map(str::trim).collect::<Vec<_>>().join("")
     }
 
     #[test]
@@ -313,6 +347,35 @@ mod tests {
     }
 
     #[test]
+    fn test_push_command_when_temp() -> Result<()> {
+        let (mut code_writer, test_file_name) = get_code_writer()?;
+        let (segment, index) = ("temp", 6);
+        code_writer.write_push_pop(CommandType::Push, &segment, index)?;
+
+        let mut asm_file_content = String::new();
+        File::open(&test_file_name)?.read_to_string(&mut asm_file_content)?;
+
+        let expect_asm = format!(
+            "
+        // temp {}
+        @{}
+        D=M
+        // push
+        @SP
+        A=M
+        M=D
+        @SP
+        M=M+1",
+            index + 5,
+            index + 5,
+        );
+        assert_eq!(normalize(&expect_asm), normalize(&asm_file_content));
+
+        fs::remove_file(test_file_name)?;
+        Ok(())
+    }
+
+    #[test]
     fn test_pop_command_when_static() -> Result<()> {
         let (mut code_writer, test_file_name) = get_code_writer()?;
         let (segment, index) = ("static", 10);
@@ -336,6 +399,43 @@ mod tests {
                 .unwrap()
                 .to_string_lossy(),
             index,
+        );
+        assert_eq!(normalize(&expect_asm), normalize(&asm_file_content));
+
+        fs::remove_file(test_file_name)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_pop_command_when_temp() -> Result<()> {
+        let (mut code_writer, test_file_name) = get_code_writer()?;
+        let (segment, index) = ("temp", 6);
+        code_writer.write_push_pop(CommandType::Pop, &segment, index)?;
+
+        let mut asm_file_content = String::new();
+        File::open(&test_file_name)?.read_to_string(&mut asm_file_content)?;
+
+        let expect_asm = format!(
+            "// temp {}
+@{}
+D=A
+
+@{}
+M=D
+
+// pop
+@SP
+M=M-1
+A=M
+D=M
+
+@R13
+A=M
+M=D
+        ",
+            index+5,
+            index+5,
+            VariableRegister::R13.as_ref(),
         );
         assert_eq!(normalize(&expect_asm), normalize(&asm_file_content));
 
@@ -400,6 +500,41 @@ mod tests {
         @R13
         // add
         D=D+M
+        // push
+        @SP
+        A=M
+        M=D
+        @SP
+        M=M+1";
+        assert_eq!(normalize(expect_asm), normalize(&asm_file_content));
+
+        fs::remove_file(test_file_name)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_write_arithmetic_when_sub() -> Result<()> {
+        let (mut code_writer, test_file_name) = get_code_writer()?;
+        code_writer.write_arithmetic("sub", 0)?;
+
+        let mut asm_file_content = String::new();
+        File::open(&test_file_name)?.read_to_string(&mut asm_file_content)?;
+
+        let expect_asm = "// pop
+        @SP
+        M=M-1
+        A=M
+        D=M
+        @R13
+        M=D
+        // pop
+        @SP
+        M=M-1
+        A=M
+        D=M
+        @R13
+        // sub
+        D=D-M
         // push
         @SP
         A=M
