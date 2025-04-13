@@ -98,7 +98,13 @@ impl CodeWriter {
                     "\n{}D=A\n",
                     segment_symbol_asm.expect("not support segment"),
                 )
-            }
+            },
+            "static" => {
+                format!(
+                    "\n{}",
+                    segment_symbol_asm.expect("not support segment"),
+                )
+            },
             _ => {
                 format!(
                     "\n{}A=M+{}\n",
@@ -261,6 +267,36 @@ mod tests {
         M=M+1
         "#;
         assert_eq!(unindent(expect_asm), unindent(&asm_file_content));
+
+        fs::remove_file(test_file_name)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_pop_command_when_static() -> Result<()> {
+        let (mut code_writer, test_file_name) = get_code_writer()?;
+        let segment = "static";
+        let index = 10;
+        code_writer.write_push_pop(CommandType::Pop, &segment, index)?;
+
+        let mut asm_file_content = String::new();
+        File::open(&test_file_name)?.read_to_string(&mut asm_file_content)?;
+
+        let expect_asm = format!(r#"// pop
+        @SP
+        M=M-1
+        A=M
+        D=M
+
+        // static {}
+        @{}.{}
+        M=D
+        "#,
+        index,
+        Path::new(&test_file_name).file_stem().unwrap().to_string_lossy(),
+        index,
+        );
+        assert_eq!(unindent(&expect_asm), unindent(&asm_file_content));
 
         fs::remove_file(test_file_name)?;
         Ok(())
