@@ -30,7 +30,7 @@ impl CodeWriter {
         }
     }
 
-    pub fn write_arithmetic(&mut self, command: &str) -> Result<()> {
+    pub fn write_arithmetic(&mut self, command: &str,comparison_count:u16) -> Result<()> {
         let is_single_operand = command == "neg" || command == "not";
         let variable_register = VariableRegister::R13;
         self.write_pop()?;
@@ -41,10 +41,7 @@ impl CodeWriter {
         }
 
         // Arithmetic
-        let arithmetic_command = ArithmeticCommandHelper::get_command(
-            command,
-            &variable_register,
-        )?;
+        let arithmetic_command = ArithmeticCommandHelper::get_command(command, &variable_register,comparison_count)?;
         self.assembly_file.write(arithmetic_command.as_bytes())?;
 
         self.write_push()?;
@@ -297,7 +294,7 @@ mod tests {
     #[test]
     fn test_write_arithmetic() -> Result<()> {
         let (mut code_writer, test_file_name) = get_code_writer()?;
-        code_writer.write_arithmetic("add")?;
+        code_writer.write_arithmetic("add",0)?;
 
         let mut asm_file_content = String::new();
         File::open(&test_file_name)?.read_to_string(&mut asm_file_content)?;
