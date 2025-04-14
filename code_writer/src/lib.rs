@@ -122,7 +122,18 @@ D=M
                         index_for_temp_segment,
                         self.get_push_code()?,
                     )
-                }
+                },
+                "pointer" => {
+                    format!(
+                        "
+{}
+D=M
+{}
+",
+                        segment_symbol_asm.unwrap(),
+                        self.get_push_code()?,
+                    )
+                },
                 _ => {
                     format!(
                         "
@@ -166,6 +177,24 @@ M=D
 ",
                         segment_symbol_asm.unwrap(),
                         index_for_temp_segment,
+                        &variable_register.as_ref(),
+                        self.get_pop_code()?,
+                        &variable_register.as_ref(),
+                    )
+                },
+                "pointer" => {
+                    format!(
+                        "
+{}
+D=A
+@{}
+M=D
+{}
+@{}
+A=M
+M=D
+",
+                        segment_symbol_asm.unwrap(),
                         &variable_register.as_ref(),
                         self.get_pop_code()?,
                         &variable_register.as_ref(),
