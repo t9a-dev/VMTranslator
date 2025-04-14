@@ -123,7 +123,7 @@ D=M
                         self.get_push_code()?,
                     )
                 },
-                "pointer" => {
+                "pointer" | "static" => {
                     format!(
                         "
 {}
