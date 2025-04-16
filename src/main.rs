@@ -1,31 +1,52 @@
 use anyhow::Result;
-use clap::Parser;
 use std::path::Path;
 
 const ASSEMBLY_FILE_EXTENSION: &str = "asm";
 
-#[derive(Debug, Parser)]
-#[command(author, version, about)]
-pub struct Arg {
-    // HackAsembler File Path
-    #[arg(value_name = "FILE_NAME.vm", short)]
-    file: String,
-}
-
 fn main() -> Result<()> {
-    if let Err(e) = vm_translator(&Arg::parse()) {
+    if let Err(e) = vm_translator(&parse_arg(std::env::args().collect())?) {
         eprintln!("{}", e);
         std::process::exit(1);
     }
     Ok(())
 }
 
-fn vm_translator(config: &Arg) -> Result<String> {
-    let vm_file_path = Path::new(&config.file);
-    let mut parser = parser::Parser::new(&config.file);
-    let asm_file_path = vm_file_path.parent().unwrap().join(format!(
+fn parse_arg(args: Vec<String>) -> Result<String> {
+    let current_dir = "./".to_string();
+    match args.get(1){
+        Some(arg) if arg.is_empty() => Ok(current_dir),
+        Some(arg) => Ok(arg.to_string()),
+        _ => Ok(current_dir),
+    }
+}
+
+fn vm_translator(path_str: &str) -> Result<()> {
+    let path = Path::new(path_str);
+    if path.is_dir() {
+        for entry in path.read_dir()?{
+            if let Ok(entry) = entry {
+                //　現在のディレクトリのファイルまで見る。再帰的にディレクトリに潜っていくことはしない。
+                if entry.path().is_file(){
+                    match entry.path().extension() {
+                        Some(file_extension) if file_extension == "vm" => {
+                            vm_translator(&entry.path().to_string_lossy().to_string().clone())?;
+                        },
+                        _ => (),
+                    }
+                } 
+            } 
+        }
+        return Ok(());
+    }
+    if path.extension().unwrap() != "vm" {
+        println!("un supported file: {:?}",path);
+        return Ok(())
+    }
+
+    let mut parser = parser::Parser::new(path.to_str().unwrap());
+    let asm_file_path = path.parent().unwrap().join(format!(
         "{}.{}",
-        vm_file_path.file_stem().unwrap().to_string_lossy(),
+        path.file_stem().unwrap().to_string_lossy(),
         ASSEMBLY_FILE_EXTENSION
     ));
     let mut code_writer = code_writer::CodeWriter::new(&asm_file_path);
@@ -62,17 +83,17 @@ fn vm_translator(config: &Arg) -> Result<String> {
     code_writer.close()?;
     println!("Translated: {}", &asm_file_path.to_string_lossy());
 
-    Ok(asm_file_path.to_string_lossy().to_string())
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, io::Write, path::Path, process::Command};
+    use std::{fs, io::Write, path::Path};
 
     use anyhow::Result;
     use rand::distr::{Alphanumeric, SampleString};
 
-    use crate::vm_translator;
+    use crate::{parse_arg, vm_translator};
 
     fn create_test_file(file_content: &str) -> String {
         let filename = Alphanumeric.sample_string(&mut rand::rng(), 5);
@@ -86,11 +107,22 @@ mod tests {
     }
 
     #[test]
+    fn parse_test() -> Result<()> {
+        let expect = "./";
+        let args = vec!["".to_string(),"".to_string()];
+        assert_eq!(parse_arg(args)?,expect.to_string());
+
+        let expect = "_test_vm_files";
+        let args = vec!["".to_string(),expect.to_string()];
+        assert_eq!(parse_arg(args)?,expect.to_string());
+
+        Ok(())
+    }
+
+    #[test]
     fn run_translator() -> Result<()> {
-        let config = super::Arg {
-            file: "test_vm_files/StackTest.vm".to_string(),
-        };
-        vm_translator(&config)?;
+        let args = vec!["".to_string(),"_test_vm_files".to_string()];
+        vm_translator(&parse_arg(args)?)?;
 
         Ok(())
     }
