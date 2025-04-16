@@ -20,6 +20,8 @@ pub enum VariableRegister {
 pub struct CodeWriter {
     assembly_file: Box<dyn Write>,
     filename: String,
+    // 無限ループで終了するようにENDラベルを必ず生成するのでVMコード内で記述されている場合に検知して重複を避ける
+    has_end_label: bool, 
 }
 
 impl CodeWriter {
@@ -27,6 +29,7 @@ impl CodeWriter {
         Self {
             assembly_file: Box::new(File::create(filename).unwrap()),
             filename: filename.file_stem().unwrap().to_string_lossy().to_string(),
+            has_end_label: false,
         }
     }
 
@@ -71,42 +74,44 @@ impl CodeWriter {
         Ok(())
     }
 
-    pub fn write_label(
-        &mut self,
-        label: &str,
-    ) -> Result<()>{
-        self.write_code(format!("
+    pub fn write_label(&mut self, label: &str) -> Result<()> {
+        if !self.has_end_label {
+            if label == "END" {
+                self.has_end_label = true;
+            }
+        }
+        self.write_code(format!(
+            "
 ({})
-",label))?;
+",
+            label
+        ))?;
         Ok(())
     }
 
-    pub fn write_goto(
-        &mut self,
-        label: &str,
-    ) -> Result<()>{
-        self.write_code(format!("
+    pub fn write_goto(&mut self, label: &str) -> Result<()> {
+        self.write_code(format!(
+            "
 @{}
 0;JMP
-",label))?;
+",
+            label
+        ))?;
         Ok(())
     }
 
-    pub fn write_if(
-        &mut self,
-        label: &str,
-    ) -> Result<()>{
-        self.write_code(format!("
+    pub fn write_if(&mut self, label: &str) -> Result<()> {
+        self.write_code(format!(
+            "
 {}
 @{}
 D;JGT
 ",
-self.get_pop_code()?,
-label,
-))?;
+            self.get_pop_code()?,
+            label,
+        ))?;
         Ok(())
     }
-
 
     pub fn close(mut self) -> Result<()> {
         self.write_code(self.get_infinity_loop_code()?)?;
@@ -159,7 +164,7 @@ D=M
                         index_for_temp_segment,
                         self.get_push_code()?,
                     )
-                },
+                }
                 "pointer" | "static" => {
                     format!(
                         "
@@ -170,7 +175,7 @@ D=M
                         segment_symbol_asm.unwrap(),
                         self.get_push_code()?,
                     )
-                },
+                }
                 _ => {
                     format!(
                         "
@@ -218,7 +223,7 @@ M=D
                         self.get_pop_code()?,
                         &variable_register.as_ref(),
                     )
-                },
+                }
                 "pointer" => {
                     format!(
                         "
@@ -297,10 +302,11 @@ M=D",
     }
 
     fn get_infinity_loop_code(&self) -> Result<String> {
-        Ok("(END)
-        @END
-        0;JMP
-        "
+        Ok(format!("{}
+@END
+0;JMP
+        ",
+    if self.has_end_label{""}else{"(END)"})
         .to_string())
     }
 }
@@ -499,8 +505,8 @@ D=M
 A=M
 M=D
         ",
-            index+5,
-            index+5,
+            index + 5,
+            index + 5,
             VariableRegister::R13.as_ref(),
         );
         assert_eq!(normalize(&expect_asm), normalize(&asm_file_content));

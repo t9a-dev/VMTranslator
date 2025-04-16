@@ -78,14 +78,17 @@ impl Parser {
 
         match command {
             cmd if ARITHMETIC_COMMANDS
-            .iter()
-            .any(|arithmetic_command| cmd.starts_with(*arithmetic_command)) => Ok(Some(CommandType::Arithmetic)),
+                .iter()
+                .any(|arithmetic_command| cmd.starts_with(*arithmetic_command)) =>
+            {
+                Ok(Some(CommandType::Arithmetic))
+            }
             cmd if cmd.starts_with(PUSH_COMMAND) => Ok(Some(CommandType::Push)),
             cmd if cmd.starts_with(POP_COMMAND) => Ok(Some(CommandType::Pop)),
             cmd if cmd.starts_with(LABEL_COMMAND) => Ok(Some(CommandType::Label)),
             cmd if cmd.starts_with(GOTO_COMMAND) => Ok(Some(CommandType::Goto)),
             cmd if cmd.starts_with(IF_COMMAND) => Ok(Some(CommandType::If)),
-            _ => Ok(None)
+            _ => Ok(None),
         }
     }
 
@@ -97,9 +100,11 @@ impl Parser {
         let commands = current_command.split_whitespace();
         match self.command_type()?.unwrap() {
             CommandType::Arithmetic => Ok(commands.into_iter().nth(0).unwrap().to_string()),
-            CommandType::Push | CommandType::Pop | CommandType::Label | CommandType::Goto | CommandType::If => {
-                Ok(commands.into_iter().nth(1).unwrap().to_string())
-            }
+            CommandType::Push
+            | CommandType::Pop
+            | CommandType::Label
+            | CommandType::Goto
+            | CommandType::If => Ok(commands.into_iter().nth(1).unwrap().to_string()),
             _ => todo!(),
         }
     }
@@ -114,7 +119,7 @@ impl Parser {
             CommandType::Push | CommandType::Pop => {
                 Ok(Some(commands.into_iter().nth(2).unwrap().parse()?))
             }
-            _ => todo!(),
+            _ => Ok(None),
         }
     }
 }
@@ -233,7 +238,7 @@ mod tests {
         let test_file = create_test_file(&file_content);
 
         let mut parser = Parser::new(&test_file);
-        let _ = fs::remove_file(test_file);
+        fs::remove_file(test_file)?;
 
         parser.advance()?;
         assert_eq!(parser.arg1()?, "constant".to_string());

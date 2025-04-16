@@ -13,7 +13,7 @@ fn main() -> Result<()> {
 
 fn parse_arg(args: Vec<String>) -> Result<String> {
     let current_dir = "./".to_string();
-    match args.get(1){
+    match args.get(1) {
         Some(arg) if arg.is_empty() => Ok(current_dir),
         Some(arg) => Ok(arg.to_string()),
         _ => Ok(current_dir),
@@ -23,25 +23,25 @@ fn parse_arg(args: Vec<String>) -> Result<String> {
 fn vm_translator(path_str: &str) -> Result<()> {
     let path = Path::new(path_str);
     if path.is_dir() {
-        for entry in path.read_dir()?{
+        for entry in path.read_dir()? {
             if let Ok(entry) = entry {
                 //　現在のディレクトリのファイルまで見る。再帰的にディレクトリに潜っていくことはしない。
-                if entry.path().is_file(){
+                if entry.path().is_file() {
                     match entry.path().extension() {
                         Some(file_extension) if file_extension == "vm" => {
                             vm_translator(&entry.path().to_string_lossy().to_string().clone())?;
-                        },
+                        }
                         _ => (),
                     }
-                } 
-            } 
+                }
+            }
         }
         return Ok(());
     }
     if let Some(extension) = path.extension() {
         if extension != "vm" {
-            println!("un supported file: {:?}",path);
-            return Ok(())
+            println!("un supported file: {:?}", path);
+            return Ok(());
         }
     }
 
@@ -70,13 +70,13 @@ fn vm_translator(path_str: &str) -> Result<()> {
             }
             parser::CommandType::Label => {
                 code_writer.write_label(&parser.arg1().unwrap())?;
-            },
+            }
             parser::CommandType::Goto => {
                 code_writer.write_goto(&parser.arg1().unwrap())?;
-            },
+            }
             parser::CommandType::If => {
                 code_writer.write_if(&parser.arg1().unwrap())?;
-            },
+            }
             parser::CommandType::Function => todo!(),
             parser::CommandType::Return => todo!(),
             parser::CommandType::Call => todo!(),
@@ -117,19 +117,22 @@ mod tests {
     #[test]
     fn parse_test() -> Result<()> {
         let expect = "./";
-        let args = vec!["".to_string(),"".to_string()];
-        assert_eq!(parse_arg(args)?,expect.to_string());
+        let args = vec!["".to_string(), "".to_string()];
+        assert_eq!(parse_arg(args)?, expect.to_string());
 
-        let expect = "test_vm_files/BasicLoop.vm";
-        let args = vec!["".to_string(),expect.to_string()];
-        assert_eq!(parse_arg(args)?,expect.to_string());
+        let expect = "test_vm_files/FibonacciSeries.vm";
+        let args = vec!["".to_string(), expect.to_string()];
+        assert_eq!(parse_arg(args)?, expect.to_string());
 
         Ok(())
     }
 
     #[test]
     fn run_translator() -> Result<()> {
-        let args = vec!["".to_string(),"test_vm_files/BasicLoop.vm".to_string()];
+        let args = vec![
+            "".to_string(),
+            "test_vm_files/FibonacciSeries.vm".to_string(),
+        ];
         vm_translator(&parse_arg(args)?)?;
 
         Ok(())
