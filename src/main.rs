@@ -38,9 +38,11 @@ fn vm_translator(path_str: &str) -> Result<()> {
         }
         return Ok(());
     }
-    if path.extension().unwrap() != "vm" {
-        println!("un supported file: {:?}",path);
-        return Ok(())
+    if let Some(extension) = path.extension() {
+        if extension != "vm" {
+            println!("un supported file: {:?}",path);
+            return Ok(())
+        }
     }
 
     let mut parser = parser::Parser::new(path.to_str().unwrap());
@@ -66,9 +68,15 @@ fn vm_translator(path_str: &str) -> Result<()> {
                     parser.arg2()?.unwrap(),
                 )?;
             }
-            parser::CommandType::Label => todo!(),
-            parser::CommandType::Goto => todo!(),
-            parser::CommandType::If => todo!(),
+            parser::CommandType::Label => {
+                code_writer.write_label(&parser.arg1().unwrap())?;
+            },
+            parser::CommandType::Goto => {
+                code_writer.write_goto(&parser.arg1().unwrap())?;
+            },
+            parser::CommandType::If => {
+                code_writer.write_if(&parser.arg1().unwrap())?;
+            },
             parser::CommandType::Function => todo!(),
             parser::CommandType::Return => todo!(),
             parser::CommandType::Call => todo!(),
@@ -112,7 +120,7 @@ mod tests {
         let args = vec!["".to_string(),"".to_string()];
         assert_eq!(parse_arg(args)?,expect.to_string());
 
-        let expect = "_test_vm_files";
+        let expect = "test_vm_files/BasicLoop.vm";
         let args = vec!["".to_string(),expect.to_string()];
         assert_eq!(parse_arg(args)?,expect.to_string());
 
@@ -121,7 +129,7 @@ mod tests {
 
     #[test]
     fn run_translator() -> Result<()> {
-        let args = vec!["".to_string(),"_test_vm_files".to_string()];
+        let args = vec!["".to_string(),"test_vm_files/BasicLoop.vm".to_string()];
         vm_translator(&parse_arg(args)?)?;
 
         Ok(())

@@ -9,6 +9,9 @@ const COMMENT_OUT_TOKEN: &str = "//";
 const ARITHMETIC_COMMANDS: [&str; 9] = ["add", "sub", "neg", "eq", "gt", "lt", "and", "or", "not"];
 const PUSH_COMMAND: &str = "push";
 const POP_COMMAND: &str = "pop";
+const LABEL_COMMAND: &str = "label";
+const GOTO_COMMAND: &str = "goto";
+const IF_COMMAND: &str = "if-goto";
 
 #[derive(Debug, PartialEq)]
 pub enum CommandType {
@@ -73,7 +76,17 @@ impl Parser {
             return Ok(Some(CommandType::Pop));
         };
 
-        Ok(None)
+        match command {
+            cmd if ARITHMETIC_COMMANDS
+            .iter()
+            .any(|arithmetic_command| cmd.starts_with(*arithmetic_command)) => Ok(Some(CommandType::Arithmetic)),
+            cmd if cmd.starts_with(PUSH_COMMAND) => Ok(Some(CommandType::Push)),
+            cmd if cmd.starts_with(POP_COMMAND) => Ok(Some(CommandType::Pop)),
+            cmd if cmd.starts_with(LABEL_COMMAND) => Ok(Some(CommandType::Label)),
+            cmd if cmd.starts_with(GOTO_COMMAND) => Ok(Some(CommandType::Goto)),
+            cmd if cmd.starts_with(IF_COMMAND) => Ok(Some(CommandType::If)),
+            _ => Ok(None)
+        }
     }
 
     pub fn arg1(&self) -> Result<String> {
@@ -84,7 +97,7 @@ impl Parser {
         let commands = current_command.split_whitespace();
         match self.command_type()?.unwrap() {
             CommandType::Arithmetic => Ok(commands.into_iter().nth(0).unwrap().to_string()),
-            CommandType::Push | CommandType::Pop => {
+            CommandType::Push | CommandType::Pop | CommandType::Label | CommandType::Goto | CommandType::If => {
                 Ok(commands.into_iter().nth(1).unwrap().to_string())
             }
             _ => todo!(),
@@ -101,7 +114,7 @@ impl Parser {
             CommandType::Push | CommandType::Pop => {
                 Ok(Some(commands.into_iter().nth(2).unwrap().parse()?))
             }
-            _ => Ok(None),
+            _ => todo!(),
         }
     }
 }
@@ -224,11 +237,11 @@ mod tests {
 
         parser.advance()?;
         assert_eq!(parser.arg1()?, "constant".to_string());
-        assert_eq!(parser.arg2()?.unwrap(), "7".to_string());
+        assert_eq!(parser.arg2()?.unwrap(), "7".parse()?);
 
         parser.advance()?;
         assert_eq!(parser.arg1()?, "constant".to_string());
-        assert_eq!(parser.arg2()?.unwrap(), "8".to_string());
+        assert_eq!(parser.arg2()?.unwrap(), "8".parse()?);
 
         parser.advance()?;
         assert_eq!(parser.arg1()?, "add".to_string());
@@ -236,19 +249,19 @@ mod tests {
 
         parser.advance()?;
         assert_eq!(parser.arg1()?, "constant".to_string());
-        assert_eq!(parser.arg2()?.unwrap(), "7".to_string());
+        assert_eq!(parser.arg2()?.unwrap(), "7".parse()?);
 
         parser.advance()?;
         assert_eq!(parser.arg1()?, "constant".to_string());
-        assert_eq!(parser.arg2()?.unwrap(), "8".to_string());
+        assert_eq!(parser.arg2()?.unwrap(), "8".parse()?);
 
         parser.advance()?;
         assert_eq!(parser.arg1()?, "this".to_string());
-        assert_eq!(parser.arg2()?.unwrap(), "0".to_string());
+        assert_eq!(parser.arg2()?.unwrap(), "0".parse()?);
 
         parser.advance()?;
         assert_eq!(parser.arg1()?, "this".to_string());
-        assert_eq!(parser.arg2()?.unwrap(), "5".to_string());
+        assert_eq!(parser.arg2()?.unwrap(), "5".parse()?);
 
         Ok(())
     }

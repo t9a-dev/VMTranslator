@@ -2,7 +2,7 @@ pub mod helper;
 
 use std::{fs::File, io::Write, path::Path};
 
-use anyhow::Result;
+use anyhow::{Ok, Result};
 use helper::arithmetic::ArithmeticCommandHelper;
 use std::convert::AsRef;
 use strum_macros::AsRefStr;
@@ -70,6 +70,43 @@ impl CodeWriter {
         self.write_code(self.get_segment_code(command, segment, index)?)?;
         Ok(())
     }
+
+    pub fn write_label(
+        &mut self,
+        label: &str,
+    ) -> Result<()>{
+        self.write_code(format!("
+({})
+",label))?;
+        Ok(())
+    }
+
+    pub fn write_goto(
+        &mut self,
+        label: &str,
+    ) -> Result<()>{
+        self.write_code(format!("
+@{}
+0;JMP
+",label))?;
+        Ok(())
+    }
+
+    pub fn write_if(
+        &mut self,
+        label: &str,
+    ) -> Result<()>{
+        self.write_code(format!("
+{}
+@{}
+D;JGT
+",
+self.get_pop_code()?,
+label,
+))?;
+        Ok(())
+    }
+
 
     pub fn close(mut self) -> Result<()> {
         self.write_code(self.get_infinity_loop_code()?)?;
