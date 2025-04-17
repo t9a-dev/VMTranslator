@@ -12,6 +12,9 @@ const POP_COMMAND: &str = "pop";
 const LABEL_COMMAND: &str = "label";
 const GOTO_COMMAND: &str = "goto";
 const IF_COMMAND: &str = "if-goto";
+const FUNCTION_COMMAND: &str = "";
+const RETURN_COMMAND: &str = "";
+const CALL_COMMAND: &str = "";
 
 #[derive(Debug, PartialEq)]
 pub enum CommandType {
@@ -61,21 +64,6 @@ impl Parser {
 
     pub fn command_type(&self) -> Result<Option<CommandType>> {
         let command = self.current_command.clone().expect("current command empty");
-
-        if ARITHMETIC_COMMANDS
-            .iter()
-            .any(|arithmetic_command| command.starts_with(*arithmetic_command))
-        {
-            return Ok(Some(CommandType::Arithmetic));
-        }
-
-        if command.starts_with(PUSH_COMMAND) {
-            return Ok(Some(CommandType::Push));
-        };
-        if command.starts_with(POP_COMMAND) {
-            return Ok(Some(CommandType::Pop));
-        };
-
         match command {
             cmd if ARITHMETIC_COMMANDS
                 .iter()
@@ -88,6 +76,9 @@ impl Parser {
             cmd if cmd.starts_with(LABEL_COMMAND) => Ok(Some(CommandType::Label)),
             cmd if cmd.starts_with(GOTO_COMMAND) => Ok(Some(CommandType::Goto)),
             cmd if cmd.starts_with(IF_COMMAND) => Ok(Some(CommandType::If)),
+            cmd if cmd.starts_with(FUNCTION_COMMAND) => Ok(Some(CommandType::Function)),
+            cmd if cmd.starts_with(RETURN_COMMAND) => Ok(Some(CommandType::Return)),
+            cmd if cmd.starts_with(CALL_COMMAND) => Ok(Some(CommandType::Call)),
             _ => Ok(None),
         }
     }

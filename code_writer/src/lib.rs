@@ -20,8 +20,9 @@ pub enum VariableRegister {
 pub struct CodeWriter {
     assembly_file: Box<dyn Write>,
     filename: String,
+    incremental_uniq_index: u16,
     // 無限ループで終了するようにENDラベルを必ず生成するのでVMコード内で記述されている場合に検知して重複を避ける
-    has_end_label: bool, 
+    has_end_label: bool,
 }
 
 impl CodeWriter {
@@ -29,11 +30,12 @@ impl CodeWriter {
         Self {
             assembly_file: Box::new(File::create(filename).unwrap()),
             filename: filename.file_stem().unwrap().to_string_lossy().to_string(),
+            incremental_uniq_index: 0,
             has_end_label: false,
         }
     }
 
-    pub fn write_arithmetic(&mut self, command: &str, comparison_count: u16) -> Result<()> {
+    pub fn write_arithmetic(&mut self, command: &str) -> Result<()> {
         let is_single_operand = command == "neg" || command == "not";
         let variable_register = VariableRegister::R13;
 
@@ -54,7 +56,7 @@ impl CodeWriter {
                 ArithmeticCommandHelper::get_command(
                     command,
                     &variable_register,
-                    comparison_count
+                    self.incremental_uniq_index,
                 )?,
                 self.get_push_code()?,
             )
@@ -90,13 +92,7 @@ impl CodeWriter {
     }
 
     pub fn write_goto(&mut self, label: &str) -> Result<()> {
-        self.write_code(format!(
-            "
-@{}
-0;JMP
-",
-            label
-        ))?;
+        self.write_code(self.get_goto_code(label))?;
         Ok(())
     }
 
@@ -113,10 +109,27 @@ D;JGT
         Ok(())
     }
 
+    pub fn write_function(&self, function_name: &str, n_vars: u16) -> Result<()> {
+        Ok(())
+    }
+
+    pub fn write_call(&mut self, function_name: &str, n_args: u16) -> Result<()> {
+        self.write_code(self.get_call_code(function_name, n_args))?;
+        Ok(())
+    }
+
+    pub fn write_return(&self) -> Result<()> {
+        Ok(())
+    }
+
     pub fn close(mut self) -> Result<()> {
         self.write_code(self.get_infinity_loop_code()?)?;
         drop(self.assembly_file);
         Ok(())
+    }
+
+    pub fn increment_uniq_index(&mut self) {
+        self.incremental_uniq_index += 1;
     }
 
     fn write_code(&mut self, code: String) -> Result<()> {
@@ -270,6 +283,91 @@ M=D
         Ok(segment_code.to_string())
     }
 
+    fn get_goto_code(&self, label: &str) -> String {
+        format!(
+            "
+@{}
+0;JMP
+",
+            label
+        )
+    }
+
+    fn get_function_code(&self,function_name: &str,n_vars: u16) -> String{
+        todo!();
+        if n_vars == 0 {
+            format!("
+({})
+",function_name)
+        }else{
+        let mut buffer = String::new();
+        for i in 0..n_vars {
+            buffer += &format!("
+        ");
+        }
+        buffer
+        }
+    }
+
+    fn get_call_code(&self, function_name: &str, n_args: u16) -> String {
+        let return_address_symbol = format!(
+            "{}$ret.{}",
+            function_name, self.incremental_uniq_index
+        );
+        let gen_push_segment_code = |symbol: &str| -> String {
+            format!(
+                "
+@{}
+D=A
+{}
+",
+                symbol,
+                self.get_push_code().unwrap()
+            )
+        };
+        format!(
+            "
+// call function {}
+{}
+{}
+{}
+{}
+{}
+
+// ARG=SP-5-nArgs
+@5
+D=A
+@{}
+D=D-A
+@SP
+D=M-D
+@ARG
+M=D
+
+// LCL=SP
+@SP
+D=M
+@LCL
+M=D
+
+// goto function {}
+{}
+
+({})
+",
+            function_name,
+            gen_push_segment_code(&return_address_symbol),
+            gen_push_segment_code("LCL"),
+            gen_push_segment_code("ARG"),
+            gen_push_segment_code("THIS"),
+            gen_push_segment_code("THAT"),
+            n_args,
+            function_name,
+            self.get_goto_code(function_name),
+            return_address_symbol,
+        )
+    }
+
     fn get_push_code(&self) -> Result<String> {
         Ok("
 // push
@@ -302,11 +400,13 @@ M=D",
     }
 
     fn get_infinity_loop_code(&self) -> Result<String> {
-        Ok(format!("{}
+        Ok(format!(
+            "{}
 @END
 0;JMP
         ",
-    if self.has_end_label{""}else{"(END)"})
+            if self.has_end_label { "" } else { "(END)" }
+        )
         .to_string())
     }
 }
@@ -315,6 +415,7 @@ M=D",
 mod tests {
     use pretty_assertions::assert_eq;
     use rand::distr::{Alphanumeric, SampleString};
+    use core::arch;
     use std::{fs, io::Read};
 
     use super::*;
@@ -552,7 +653,7 @@ M=D
     #[test]
     fn test_write_arithmetic() -> Result<()> {
         let (mut code_writer, test_file_name) = get_code_writer()?;
-        code_writer.write_arithmetic("add", 0)?;
+        code_writer.write_arithmetic("add")?;
 
         let mut asm_file_content = String::new();
         File::open(&test_file_name)?.read_to_string(&mut asm_file_content)?;
@@ -587,7 +688,7 @@ M=D
     #[test]
     fn test_write_arithmetic_when_sub() -> Result<()> {
         let (mut code_writer, test_file_name) = get_code_writer()?;
-        code_writer.write_arithmetic("sub", 0)?;
+        code_writer.write_arithmetic("sub")?;
 
         let mut asm_file_content = String::new();
         File::open(&test_file_name)?.read_to_string(&mut asm_file_content)?;
@@ -614,6 +715,95 @@ M=D
         @SP
         M=M+1";
         assert_eq!(normalize(expect_asm), normalize(&asm_file_content));
+
+        fs::remove_file(test_file_name)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_call_code() -> Result<()> {
+        let (mut code_writer, test_file_name) = get_code_writer()?;
+        let (function_name, n_args) = ("SimpleFunction.test", 2);
+        code_writer.write_call(function_name,n_args)?;
+        let expect = format!("
+// call function SimpleFunction.test
+@{}$ret.0
+D=A
+// push
+@SP
+A=M
+M=D
+@SP
+M=M+1
+
+@LCL
+D=A
+// push
+@SP
+A=M
+M=D
+@SP
+M=M+1
+
+@ARG
+D=A
+// push
+@SP
+A=M
+M=D
+@SP
+M=M+1
+
+@THIS
+D=A
+// push
+@SP
+A=M
+M=D
+@SP
+M=M+1
+
+@THAT
+D=A
+// push
+@SP
+A=M
+M=D
+@SP
+M=M+1
+
+// ARG=SP-5-nArgs
+@5
+D=A
+@{}
+D=D-A
+@SP
+D=M-D
+@ARG
+M=D
+
+// LCL=SP
+@SP
+D=M
+@LCL
+M=D
+
+// goto function {}
+@{}
+0;JMP
+
+({}$ret.0)
+",
+function_name,
+n_args,
+function_name,
+function_name,
+function_name,
+);
+        let mut actual = String::new();
+        File::open(&test_file_name)?.read_to_string(&mut actual)?;
+
+        assert_eq!(normalize(&expect),normalize(&actual));
 
         fs::remove_file(test_file_name)?;
         Ok(())

@@ -53,13 +53,12 @@ fn vm_translator(path_str: &str) -> Result<()> {
     ));
     let mut code_writer = code_writer::CodeWriter::new(&asm_file_path);
 
-    let mut comparison_count: u16 = 0;
     while parser.has_more_lines()? {
         parser.advance()?;
 
         match parser.command_type()?.unwrap() {
             parser::CommandType::Arithmetic => {
-                code_writer.write_arithmetic(parser.arg1().unwrap().as_str(), comparison_count)?;
+                code_writer.write_arithmetic(parser.arg1().unwrap().as_str())?;
             }
             parser::CommandType::Push | parser::CommandType::Pop => {
                 code_writer.write_push_pop(
@@ -85,7 +84,7 @@ fn vm_translator(path_str: &str) -> Result<()> {
         if !parser.has_more_lines()? {
             break;
         }
-        comparison_count += 1;
+        code_writer.increment_uniq_index();
     }
 
     code_writer.close()?;
@@ -120,7 +119,7 @@ mod tests {
         let args = vec!["".to_string(), "".to_string()];
         assert_eq!(parse_arg(args)?, expect.to_string());
 
-        let expect = "test_vm_files/FibonacciSeries.vm";
+        let expect = "test_vm_files/8/FunctionCalls/SimpleFunction/SimpleFunction.vm";
         let args = vec!["".to_string(), expect.to_string()];
         assert_eq!(parse_arg(args)?, expect.to_string());
 
@@ -131,7 +130,7 @@ mod tests {
     fn run_translator() -> Result<()> {
         let args = vec![
             "".to_string(),
-            "test_vm_files/FibonacciSeries.vm".to_string(),
+            "test_vm_files/8/FunctionCalls/SimpleFunction/SimpleFunction.vm".to_string(),
         ];
         vm_translator(&parse_arg(args)?)?;
 
