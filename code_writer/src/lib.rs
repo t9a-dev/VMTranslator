@@ -119,7 +119,8 @@ D;JGT
         Ok(())
     }
 
-    pub fn write_return(&self) -> Result<()> {
+    pub fn write_return(&mut self) -> Result<()> {
+        self.write_code(self.get_return_code())?;
         Ok(())
     }
 
@@ -294,21 +295,27 @@ M=D
         )
     }
 
-    fn get_function_code(&self,function_name: &str,n_vars: u16) -> String{
+    fn get_function_code(&self, function_name: &str, n_vars: u16) -> String {
         let mut buffer = String::new();
-        buffer += &format!("
+        buffer += &format!(
+            "
 ({})
-",function_name);
+",
+            function_name
+        );
         if n_vars == 0 {
-           return buffer;     
+            return buffer;
         }
 
-        let init_var_asm  = || -> String {
-format!("
+        let init_var_asm = || -> String {
+            format!(
+                "
 @0
 D=A
 {}
-        ",self.get_push_code().unwrap())
+",
+                self.get_push_code().unwrap()
+            )
         };
 
         for _ in 0..n_vars {
@@ -318,10 +325,8 @@ D=A
     }
 
     fn get_call_code(&self, function_name: &str, n_args: u16) -> String {
-        let return_address_symbol = format!(
-            "{}$ret.{}",
-            function_name, self.incremental_uniq_index
-        );
+        let return_address_symbol =
+            format!("{}$ret.{}", function_name, self.incremental_uniq_index);
         let gen_push_segment_code = |symbol: &str| -> String {
             format!(
                 "
@@ -376,6 +381,71 @@ M=D
         )
     }
 
+    fn get_return_code(&self) -> String {
+        format!(
+            "
+// return
+@LCL
+D=M
+@frame
+M=D
+
+@5
+D=A
+@frame
+A=M-D
+D=M
+@retAddr
+M=D
+
+// pop to ARG
+{}
+@ARG
+A=M
+M=D
+D=A
+@SP
+M=D+1
+
+@frame
+A=M-1
+D=M
+@THAT
+M=D
+
+@2
+D=A
+@frame
+A=M-D
+D=M
+@THIS
+M=D
+
+@3
+D=A
+@frame
+A=M-D
+D=M
+@ARG
+M=D
+
+@4
+D=A
+@frame
+A=M-D
+D=M
+@LCL
+M=D
+
+//goto retAddr
+@retAddr
+A=M
+0;JMP
+",
+            self.get_pop_code().unwrap(),
+        )
+    }
+
     fn get_push_code(&self) -> Result<String> {
         Ok("
 // push
@@ -412,7 +482,7 @@ M=D",
             "{}
 @END
 0;JMP
-        ",
+",
             if self.has_end_label { "" } else { "(END)" }
         )
         .to_string())
@@ -731,8 +801,9 @@ M=D
     fn test_write_call_code() -> Result<()> {
         let (mut code_writer, test_file_name) = get_code_writer()?;
         let (function_name, n_args) = ("SimpleFunction.test", 2);
-        code_writer.write_call(function_name,n_args)?;
-        let expect = format!("
+        code_writer.write_call(function_name, n_args)?;
+        let expect = format!(
+            "
 // call function SimpleFunction.test
 @{}$ret.0
 D=A
@@ -801,16 +872,12 @@ M=D
 
 ({}$ret.0)
 ",
-function_name,
-n_args,
-function_name,
-function_name,
-function_name,
-);
+            function_name, n_args, function_name, function_name, function_name,
+        );
         let mut actual = String::new();
         File::open(&test_file_name)?.read_to_string(&mut actual)?;
 
-        assert_eq!(normalize(&expect),normalize(&actual));
+        assert_eq!(normalize(&expect), normalize(&actual));
 
         fs::remove_file(test_file_name)?;
         Ok(())
@@ -820,9 +887,10 @@ function_name,
     fn test_write_function_code() -> Result<()> {
         let (mut code_writer, test_file_name) = get_code_writer()?;
         let (function_name, n_args) = ("SimpleFunction.test", 1);
-        code_writer.write_function(function_name,n_args)?;
-        
-        let expect = format!("
+        code_writer.write_function(function_name, n_args)?;
+
+        let expect = format!(
+            "
 ({})
 @0
 D=A
@@ -833,12 +901,12 @@ M=D
 @SP
 M=M+1
 ",
-function_name,
-);
+            function_name,
+        );
         let mut actual = String::new();
         File::open(&test_file_name)?.read_to_string(&mut actual)?;
 
-        assert_eq!(normalize(&expect),normalize(&actual));
+        assert_eq!(normalize(&expect), normalize(&actual));
 
         fs::remove_file(test_file_name)?;
         Ok(())
@@ -848,17 +916,18 @@ function_name,
     fn test_write_function_code_when_args_zero() -> Result<()> {
         let (mut code_writer, test_file_name) = get_code_writer()?;
         let (function_name, n_args) = ("SimpleFunction.test", 0);
-        code_writer.write_function(function_name,n_args)?;
-        
-        let expect = format!("
+        code_writer.write_function(function_name, n_args)?;
+
+        let expect = format!(
+            "
 ({})
 ",
-function_name,
-);
+            function_name,
+        );
         let mut actual = String::new();
         File::open(&test_file_name)?.read_to_string(&mut actual)?;
 
-        assert_eq!(normalize(&expect),normalize(&actual));
+        assert_eq!(normalize(&expect), normalize(&actual));
 
         fs::remove_file(test_file_name)?;
         Ok(())

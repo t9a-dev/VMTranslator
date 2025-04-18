@@ -12,9 +12,9 @@ const POP_COMMAND: &str = "pop";
 const LABEL_COMMAND: &str = "label";
 const GOTO_COMMAND: &str = "goto";
 const IF_COMMAND: &str = "if-goto";
-const FUNCTION_COMMAND: &str = "";
-const RETURN_COMMAND: &str = "";
-const CALL_COMMAND: &str = "";
+const FUNCTION_COMMAND: &str = "function";
+const RETURN_COMMAND: &str = "return";
+const CALL_COMMAND: &str = "call";
 
 #[derive(Debug, PartialEq)]
 pub enum CommandType {
@@ -95,8 +95,15 @@ impl Parser {
             | CommandType::Pop
             | CommandType::Label
             | CommandType::Goto
-            | CommandType::If => Ok(commands.into_iter().nth(1).unwrap().to_string()),
-            _ => todo!(),
+            | CommandType::If
+            | CommandType::Function
+            | CommandType::Call => Ok(commands
+                .clone()
+                .into_iter()
+                .nth(1)
+                .expect(&format!("get nth 1 failed commands: {:?}", commands))
+                .to_string()),
+            _ => panic!("error parse command arg1: {:?}", commands),
         }
     }
 
@@ -107,10 +114,10 @@ impl Parser {
             .expect("current command is empty");
         let commands = current_command.split_whitespace();
         match self.command_type()?.unwrap() {
-            CommandType::Push | CommandType::Pop => {
+            CommandType::Push | CommandType::Pop | CommandType::Function | CommandType::Call => {
                 Ok(Some(commands.into_iter().nth(2).unwrap().parse()?))
             }
-            _ => Ok(None),
+            _ => panic!("error parse command arg2: {:?}", commands),
         }
     }
 }
@@ -241,7 +248,6 @@ mod tests {
 
         parser.advance()?;
         assert_eq!(parser.arg1()?, "add".to_string());
-        assert_eq!(parser.arg2()?, None);
 
         parser.advance()?;
         assert_eq!(parser.arg1()?, "constant".to_string());

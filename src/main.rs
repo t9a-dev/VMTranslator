@@ -76,9 +76,19 @@ fn vm_translator(path_str: &str) -> Result<()> {
             parser::CommandType::If => {
                 code_writer.write_if(&parser.arg1().unwrap())?;
             }
-            parser::CommandType::Function => todo!(),
-            parser::CommandType::Return => todo!(),
-            parser::CommandType::Call => todo!(),
+            parser::CommandType::Function => {
+                let function_name = parser.arg1()?;
+                let n_vars = parser.arg2()?.unwrap();
+                code_writer.write_function(&function_name, n_vars)?;
+            }
+            parser::CommandType::Return => {
+                code_writer.write_return()?;
+            }
+            parser::CommandType::Call => {
+                let function_name = parser.arg1()?;
+                let n_args = parser.arg2()?.unwrap();
+                code_writer.write_call(&function_name, n_args)?;
+            }
         }
 
         if !parser.has_more_lines()? {
