@@ -109,7 +109,8 @@ D;JGT
         Ok(())
     }
 
-    pub fn write_function(&self, function_name: &str, n_vars: u16) -> Result<()> {
+    pub fn write_function(&mut self, function_name: &str, n_vars: u16) -> Result<()> {
+        self.write_code(self.get_function_code(function_name, n_vars))?;
         Ok(())
     }
 
@@ -294,19 +295,26 @@ M=D
     }
 
     fn get_function_code(&self,function_name: &str,n_vars: u16) -> String{
-        todo!();
-        if n_vars == 0 {
-            format!("
-({})
-",function_name)
-        }else{
         let mut buffer = String::new();
-        for i in 0..n_vars {
-            buffer += &format!("
-        ");
+        buffer += &format!("
+({})
+",function_name);
+        if n_vars == 0 {
+           return buffer;     
+        }
+
+        let init_var_asm  = || -> String {
+format!("
+@0
+D=A
+{}
+        ",self.get_push_code().unwrap())
+        };
+
+        for _ in 0..n_vars {
+            buffer += &init_var_asm();
         }
         buffer
-        }
     }
 
     fn get_call_code(&self, function_name: &str, n_args: u16) -> String {
@@ -415,7 +423,6 @@ M=D",
 mod tests {
     use pretty_assertions::assert_eq;
     use rand::distr::{Alphanumeric, SampleString};
-    use core::arch;
     use std::{fs, io::Read};
 
     use super::*;
@@ -721,7 +728,7 @@ M=D
     }
 
     #[test]
-    fn test_get_call_code() -> Result<()> {
+    fn test_write_call_code() -> Result<()> {
         let (mut code_writer, test_file_name) = get_code_writer()?;
         let (function_name, n_args) = ("SimpleFunction.test", 2);
         code_writer.write_call(function_name,n_args)?;
@@ -798,6 +805,54 @@ function_name,
 n_args,
 function_name,
 function_name,
+function_name,
+);
+        let mut actual = String::new();
+        File::open(&test_file_name)?.read_to_string(&mut actual)?;
+
+        assert_eq!(normalize(&expect),normalize(&actual));
+
+        fs::remove_file(test_file_name)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_write_function_code() -> Result<()> {
+        let (mut code_writer, test_file_name) = get_code_writer()?;
+        let (function_name, n_args) = ("SimpleFunction.test", 1);
+        code_writer.write_function(function_name,n_args)?;
+        
+        let expect = format!("
+({})
+@0
+D=A
+// push
+@SP
+A=M
+M=D
+@SP
+M=M+1
+",
+function_name,
+);
+        let mut actual = String::new();
+        File::open(&test_file_name)?.read_to_string(&mut actual)?;
+
+        assert_eq!(normalize(&expect),normalize(&actual));
+
+        fs::remove_file(test_file_name)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_write_function_code_when_args_zero() -> Result<()> {
+        let (mut code_writer, test_file_name) = get_code_writer()?;
+        let (function_name, n_args) = ("SimpleFunction.test", 0);
+        code_writer.write_function(function_name,n_args)?;
+        
+        let expect = format!("
+({})
+",
 function_name,
 );
         let mut actual = String::new();
