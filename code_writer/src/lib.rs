@@ -46,10 +46,10 @@ impl CodeWriter {
 {}
 {}
 {}",
-                self.get_pop_code()?,
-                self.get_load_register_code(variable_register)?,
+                self.get_pop_code(),
+                self.get_load_register_code(variable_register),
                 if !is_single_operand {
-                    self.get_pop_code()?
+                    self.get_pop_code()
                 } else {
                     "".to_string()
                 },
@@ -58,7 +58,7 @@ impl CodeWriter {
                     &variable_register,
                     self.incremental_uniq_index,
                 )?,
-                self.get_push_code()?,
+                self.get_push_code(),
             )
             .as_str(),
         ))?;
@@ -103,7 +103,7 @@ impl CodeWriter {
 @{}
 D;JGT
 ",
-            self.get_pop_code()?,
+            self.get_pop_code(),
             label,
         ))?;
         Ok(())
@@ -125,7 +125,7 @@ D;JGT
     }
 
     pub fn close(mut self) -> Result<()> {
-        self.write_code(self.get_infinity_loop_code()?)?;
+        self.write_code(self.get_infinity_loop_code())?;
         drop(self.assembly_file);
         Ok(())
     }
@@ -164,7 +164,7 @@ D;JGT
                     format!(
                         "{}D=A\n{}",
                         segment_symbol_asm.unwrap(),
-                        self.get_push_code()?
+                        self.get_push_code()
                     )
                 }
                 "temp" => {
@@ -177,7 +177,7 @@ D=M
 ",
                         segment_symbol_asm.unwrap(),
                         index_for_temp_segment,
-                        self.get_push_code()?,
+                        self.get_push_code(),
                     )
                 }
                 "pointer" | "static" => {
@@ -188,7 +188,7 @@ D=M
 {}
 ",
                         segment_symbol_asm.unwrap(),
-                        self.get_push_code()?,
+                        self.get_push_code(),
                     )
                 }
                 _ => {
@@ -203,7 +203,7 @@ D=M
 ",
                         index,
                         segment_symbol_asm.unwrap(),
-                        self.get_push_code()?,
+                        self.get_push_code(),
                     )
                 }
             },
@@ -215,7 +215,7 @@ D=M
 {}
 M=D
 ",
-                        self.get_pop_code()?,
+                        self.get_pop_code(),
                         segment_symbol_asm.unwrap()
                     )
                 }
@@ -235,7 +235,7 @@ M=D
                         segment_symbol_asm.unwrap(),
                         index_for_temp_segment,
                         &variable_register.as_ref(),
-                        self.get_pop_code()?,
+                        self.get_pop_code(),
                         &variable_register.as_ref(),
                     )
                 }
@@ -253,7 +253,7 @@ M=D
 ",
                         segment_symbol_asm.unwrap(),
                         &variable_register.as_ref(),
-                        self.get_pop_code()?,
+                        self.get_pop_code(),
                         &variable_register.as_ref(),
                     )
                 }
@@ -274,7 +274,7 @@ M=D
                         index,
                         segment_symbol_asm.unwrap(),
                         &variable_register.as_ref(),
-                        self.get_pop_code()?,
+                        self.get_pop_code(),
                         &variable_register.as_ref(),
                     )
                 }
@@ -314,7 +314,7 @@ M=D
 D=A
 {}
 ",
-                self.get_push_code().unwrap()
+                self.get_push_code()
             )
         };
 
@@ -335,7 +335,7 @@ D=A
 {}
 ",
                 symbol,
-                self.get_push_code().unwrap()
+                self.get_push_code()
             )
         };
         format!(
@@ -442,12 +442,12 @@ M=D
 A=M
 0;JMP
 ",
-            self.get_pop_code().unwrap(),
+            self.get_pop_code(),
         )
     }
 
-    fn get_push_code(&self) -> Result<String> {
-        Ok("
+    fn get_push_code(&self) -> String {
+        "
 // push
 @SP
 A=M
@@ -455,37 +455,37 @@ M=D
 @SP
 M=M+1
 "
-        .to_string())
+        .to_string()
     }
 
-    fn get_pop_code(&self) -> Result<String> {
-        Ok("
+    fn get_pop_code(&self) -> String {
+        "
 // pop
 @SP
 M=M-1
 A=M
 D=M
 "
-        .to_string())
+        .to_string()
     }
 
-    fn get_load_register_code(&self, register: VariableRegister) -> Result<String> {
-        Ok(format!(
+    fn get_load_register_code(&self, register: VariableRegister) -> String {
+        format!(
             "@{}
 M=D",
             register.as_ref()
-        ))
+        )
     }
 
-    fn get_infinity_loop_code(&self) -> Result<String> {
-        Ok(format!(
+    fn get_infinity_loop_code(&self) -> String {
+        format!(
             "{}
 @END
 0;JMP
 ",
             if self.has_end_label { "" } else { "(END)" }
         )
-        .to_string())
+        .to_string()
     }
 }
 
@@ -936,7 +936,7 @@ M=M+1
     #[test]
     fn test_write_infinity_loop() -> Result<()> {
         let (code_writer, test_file_name) = get_code_writer()?;
-        let asm_file_content = code_writer.get_infinity_loop_code()?;
+        let asm_file_content = code_writer.get_infinity_loop_code();
 
         let expect_asm = "
         (END)
