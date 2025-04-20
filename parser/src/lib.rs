@@ -35,9 +35,9 @@ pub struct Parser {
 }
 
 impl Parser {
-    pub fn new(filename: &str) -> Self {
+    pub fn new(vm_filename: &str) -> Self {
         Self {
-            vm_code: Box::new(BufReader::new(File::open(filename).unwrap())),
+            vm_code: Box::new(BufReader::new(File::open(vm_filename).unwrap())),
             current_command: None,
         }
     }

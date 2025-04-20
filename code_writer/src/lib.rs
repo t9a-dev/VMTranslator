@@ -19,20 +19,34 @@ pub enum VariableRegister {
 
 pub struct CodeWriter {
     assembly_file: Box<dyn Write>,
-    filename: String,
+    vm_filename: String,
     incremental_uniq_index: u16,
     // 無限ループで終了するようにENDラベルを必ず生成するのでVMコード内で記述されている場合に検知して重複を避ける
     has_end_label: bool,
 }
 
 impl CodeWriter {
-    pub fn new(filename: &Path) -> Self {
-        Self {
-            assembly_file: Box::new(File::create(filename).unwrap()),
-            filename: filename.file_stem().unwrap().to_string_lossy().to_string(),
+    pub fn new(output_file_path: &Path) -> Self {
+        let mut code_writer = Self {
+            assembly_file: Box::new(File::create(output_file_path).unwrap()),
+            vm_filename: output_file_path
+                .file_stem()
+                .unwrap()
+                .to_string_lossy()
+                .to_string(),
             incremental_uniq_index: 0,
             has_end_label: false,
-        }
+        };
+
+        let _ = code_writer.write_bootstrap_code();
+
+        code_writer
+    }
+
+    pub fn set_filename(&mut self, filename: &Path) -> Result<()> {
+        self.vm_filename = filename.file_stem().unwrap().to_string_lossy().to_string();
+
+        Ok(())
     }
 
     pub fn write_arithmetic(&mut self, command: &str) -> Result<()> {
@@ -97,15 +111,7 @@ impl CodeWriter {
     }
 
     pub fn write_if(&mut self, label: &str) -> Result<()> {
-        self.write_code(format!(
-            "
-{}
-@{}
-D;JGT
-",
-            self.get_pop_code(),
-            label,
-        ))?;
+        self.write_code(self.get_if_code(label))?;
         Ok(())
     }
 
@@ -134,9 +140,49 @@ D;JGT
         self.incremental_uniq_index += 1;
     }
 
+    fn write_bootstrap_code(&mut self) -> Result<()> {
+        self.write_code(self.get_bootstrap_code())?;
+
+        Ok(())
+    }
+
     fn write_code(&mut self, code: String) -> Result<()> {
         self.assembly_file.write(&unindent_bytes(code.as_bytes()))?;
         Ok(())
+    }
+
+    fn get_bootstrap_code(&self) -> String {
+        format!(
+            "
+// bootstrap     
+@256
+D=A
+@SP
+M=D
+
+@300
+D=A
+@LCL
+M=D
+
+@400
+D=A
+@ARG
+M=D
+
+@500
+D=A
+@THIS
+M=D
+
+@600
+D=A
+@THAT
+M=D
+{}
+",
+self.get_call_code("Sys.init", 0)
+        )
     }
 
     fn get_segment_code(&self, command: CommandType, segment: &str, index: u16) -> Result<String> {
@@ -153,7 +199,7 @@ D;JGT
             "pointer" if index == 1 => Some(format!("// that {}\n@THAT", index)),
             "static" => Some(format!(
                 "// static {}\n@{}.{}\n",
-                index, self.filename, index
+                index, self.vm_filename, index
             )),
             _ => None,
         };
@@ -295,6 +341,20 @@ M=D
         )
     }
 
+    fn get_if_code(&self,label: &str) -> String{
+format!(
+            "
+// if-goto {}
+{}
+@{}
+D;JNE
+",
+            label,
+            self.get_pop_code(),
+            label,
+        )
+    }
+
     fn get_function_code(&self, function_name: &str, n_vars: u16) -> String {
         let mut buffer = String::new();
         buffer += &format!(
@@ -331,7 +391,7 @@ D=A
             format!(
                 "
 @{}
-D=A
+D=M
 {}
 ",
                 symbol,
@@ -341,7 +401,11 @@ D=A
         format!(
             "
 // call function {}
+// push returnAddress
+@{}
+D=A
 {}
+
 {}
 {}
 {}
@@ -351,7 +415,7 @@ D=A
 @5
 D=A
 @{}
-D=D-A
+D=D+A
 @SP
 D=M-D
 @ARG
@@ -369,7 +433,8 @@ M=D
 ({})
 ",
             function_name,
-            gen_push_segment_code(&return_address_symbol),
+            return_address_symbol,
+            self.get_push_code(),
             gen_push_segment_code("LCL"),
             gen_push_segment_code("ARG"),
             gen_push_segment_code("THIS"),
