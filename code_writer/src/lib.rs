@@ -641,7 +641,8 @@ mod tests {
         File::open(&test_file_name)?.read_to_string(&mut asm_file_content)?;
 
         let expect_asm = format!(
-            "@{}
+            "{}
+        @{}
         D=A
         // that {}
         @THAT
@@ -653,6 +654,7 @@ mod tests {
         M=D
         @SP
         M=M+1",
+            code_writer.get_bootstrap_code(),
             index, index,
         );
         assert_eq!(normalize(&expect_asm), normalize(&asm_file_content));
@@ -672,6 +674,7 @@ mod tests {
 
         let expect_asm = format!(
             "
+        {}
         // temp {}
         @{}
         D=M
@@ -681,6 +684,7 @@ mod tests {
         M=D
         @SP
         M=M+1",
+            code_writer.get_bootstrap_code(),
             index + 5,
             index + 5,
         );
@@ -700,7 +704,8 @@ mod tests {
         File::open(&test_file_name)?.read_to_string(&mut asm_file_content)?;
 
         let expect_asm = format!(
-            "// pop
+            "{}
+        // pop
         @SP
         M=M-1
         A=M
@@ -708,6 +713,7 @@ mod tests {
         // static {}
         @{}.{}
         M=D",
+            code_writer.get_bootstrap_code(),
             index,
             Path::new(&test_file_name)
                 .file_stem()
@@ -731,7 +737,8 @@ mod tests {
         File::open(&test_file_name)?.read_to_string(&mut asm_file_content)?;
 
         let expect_asm = format!(
-            "// temp {}
+            "{}
+// temp {}
 @{}
 D=A
 
@@ -748,6 +755,7 @@ D=M
 A=M
 M=D
         ",
+            code_writer.get_bootstrap_code(),
             index + 5,
             index + 5,
             VariableRegister::R13.as_ref(),
@@ -768,7 +776,8 @@ M=D
         File::open(&test_file_name)?.read_to_string(&mut asm_file_content)?;
 
         let expect_asm = format!(
-            "@{}
+            "{}
+        @{}
         D=A
         // local {}
         @LCL
@@ -784,6 +793,7 @@ M=D
         A=M
         M=D
         ",
+            code_writer.get_bootstrap_code(),
             index, index,
         );
         assert_eq!(normalize(&expect_asm), normalize(&asm_file_content));
@@ -800,7 +810,8 @@ M=D
         let mut asm_file_content = String::new();
         File::open(&test_file_name)?.read_to_string(&mut asm_file_content)?;
 
-        let expect_asm = "// pop
+        let expect_asm = format!("{}
+        // pop
         @SP
         M=M-1
         A=M
@@ -820,8 +831,10 @@ M=D
         A=M
         M=D
         @SP
-        M=M+1";
-        assert_eq!(normalize(expect_asm), normalize(&asm_file_content));
+        M=M+1",
+        code_writer.get_bootstrap_code(),
+    );
+        assert_eq!(normalize(&expect_asm), normalize(&asm_file_content));
 
         fs::remove_file(test_file_name)?;
         Ok(())
@@ -835,7 +848,8 @@ M=D
         let mut asm_file_content = String::new();
         File::open(&test_file_name)?.read_to_string(&mut asm_file_content)?;
 
-        let expect_asm = "// pop
+        let expect_asm = format!("{}
+        // pop
         @SP
         M=M-1
         A=M
@@ -855,8 +869,10 @@ M=D
         A=M
         M=D
         @SP
-        M=M+1";
-        assert_eq!(normalize(expect_asm), normalize(&asm_file_content));
+        M=M+1",
+        code_writer.get_bootstrap_code()
+    );
+        assert_eq!(normalize(&expect_asm), normalize(&asm_file_content));
 
         fs::remove_file(test_file_name)?;
         Ok(())
@@ -868,8 +884,9 @@ M=D
         let (function_name, n_args) = ("SimpleFunction.test", 2);
         code_writer.write_call(function_name, n_args)?;
         let expect = format!(
-            "
+            "{}
 // call function SimpleFunction.test
+// push returnAddress
 @{}$ret.0
 D=A
 // push
@@ -880,7 +897,7 @@ M=D
 M=M+1
 
 @LCL
-D=A
+D=M
 // push
 @SP
 A=M
@@ -889,7 +906,7 @@ M=D
 M=M+1
 
 @ARG
-D=A
+D=M
 // push
 @SP
 A=M
@@ -898,7 +915,7 @@ M=D
 M=M+1
 
 @THIS
-D=A
+D=M
 // push
 @SP
 A=M
@@ -907,7 +924,7 @@ M=D
 M=M+1
 
 @THAT
-D=A
+D=M
 // push
 @SP
 A=M
@@ -919,7 +936,7 @@ M=M+1
 @5
 D=A
 @{}
-D=D-A
+D=D+A
 @SP
 D=M-D
 @ARG
@@ -937,6 +954,7 @@ M=D
 
 ({}$ret.0)
 ",
+            code_writer.get_bootstrap_code(),
             function_name, n_args, function_name, function_name, function_name,
         );
         let mut actual = String::new();
@@ -956,6 +974,7 @@ M=D
 
         let expect = format!(
             "
+{}
 ({})
 @0
 D=A
@@ -966,6 +985,7 @@ M=D
 @SP
 M=M+1
 ",
+            code_writer.get_bootstrap_code(),
             function_name,
         );
         let mut actual = String::new();
@@ -985,8 +1005,10 @@ M=M+1
 
         let expect = format!(
             "
+{}
 ({})
 ",
+            code_writer.get_bootstrap_code(),
             function_name,
         );
         let mut actual = String::new();
