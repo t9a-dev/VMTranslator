@@ -1,8 +1,6 @@
 use anyhow::Result;
-use std::result::Result::Ok;
 use std::{
-    fs::File,
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader}, result::Result::Ok,
 };
 
 const COMMENT_OUT_TOKEN: &str = "//";
@@ -35,9 +33,9 @@ pub struct Parser {
 }
 
 impl Parser {
-    pub fn new(vm_filename: &str) -> Self {
+    pub fn new<T:BufRead + 'static>(vm_file: T) -> Self {
         Self {
-            vm_code: Box::new(BufReader::new(File::open(vm_filename).unwrap())),
+            vm_code: Box::new(BufReader::new(vm_file)),
             current_command: None,
         }
     }
@@ -124,33 +122,18 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, io::Write, path::Path};
+    use std::io::Cursor;
 
     use super::*;
-    use rand::distr::{Alphanumeric, SampleString};
-
-    fn create_test_file(file_content: &str) -> String {
-        let filename = Alphanumeric.sample_string(&mut rand::rng(), 5);
-        //bacon testでファイル変更検知が発生しないようにtargetディレクトリにテストファイルを作成する。
-        let _ = fs::create_dir_all("../target/test/data");
-        let file_path = Path::new("../target/test/data").join(&filename);
-        let mut file = File::create(&file_path).unwrap();
-        file.write(file_content.as_bytes()).unwrap();
-
-        file_path.to_string_lossy().to_string()
-    }
 
     #[test]
     fn test_constructor() {
-        let test_file = create_test_file("");
-        let parser = Parser::new(&test_file);
+        let parser = Parser::new(Cursor::new(b""));
         parser
             .vm_code
             .lines()
             .into_iter()
             .for_each(|line| println!("{}", line.unwrap()));
-
-        let _ = fs::remove_file(test_file);
     }
 
     #[test]
@@ -161,10 +144,7 @@ mod tests {
         push constant 8
         add
        "#;
-        let test_file = create_test_file(&file_content);
-
-        let mut parser = Parser::new(&test_file);
-        let _ = fs::remove_file(test_file);
+        let mut parser = Parser::new(Cursor::new(file_content.as_bytes()));
 
         parser.advance()?;
         assert_eq!(parser.has_more_lines()?, true);
@@ -193,10 +173,7 @@ mod tests {
         pop this 0
         pop this 5
        "#;
-        let test_file = create_test_file(&file_content);
-
-        let mut parser = Parser::new(&test_file);
-        let _ = fs::remove_file(test_file);
+        let mut parser = Parser::new(Cursor::new(file_content.as_bytes()));
 
         parser.advance()?;
         assert_eq!(parser.command_type()?.unwrap(), CommandType::Push);
@@ -233,10 +210,7 @@ mod tests {
         pop this 0
         pop this 5
        "#;
-        let test_file = create_test_file(&file_content);
-
-        let mut parser = Parser::new(&test_file);
-        fs::remove_file(test_file)?;
+        let mut parser = Parser::new(Cursor::new(file_content.as_bytes()));
 
         parser.advance()?;
         assert_eq!(parser.arg1()?, "constant".to_string());

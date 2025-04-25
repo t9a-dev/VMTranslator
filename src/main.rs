@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::path::{Path, PathBuf};
+use std::{fs::File, io::BufReader, path::{Path, PathBuf}};
 
 const ASSEMBLY_FILE_EXTENSION: &str = "asm";
 
@@ -68,7 +68,7 @@ fn vm_translator(path_str: &str) -> Result<()> {
     let mut code_writer = code_writer::CodeWriter::new(&output_asm_file_path);
     vm_files.iter().try_for_each(|vm_file: &PathBuf| -> Result<()>{
         code_writer.set_filename(&vm_file)?;
-        let mut parser = parser::Parser::new(&vm_file.to_string_lossy().to_string());
+        let mut parser = parser::Parser::new(BufReader::new(File::open(vm_file)?));
         while parser.has_more_lines()? {
             parser.advance()?;
 
@@ -123,10 +123,7 @@ fn vm_translator(path_str: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, io::Write, path::Path};
-
     use anyhow::Result;
-    use rand::distr::{Alphanumeric, SampleString};
 
     use crate::{parse_arg, vm_translator};
 
